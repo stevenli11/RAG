@@ -104,7 +104,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Dependencies**: `chromadb`, `transformers`, `torch`, `sentence-transformers`
 - **Output**: AI-generated answers with relevant document context citations
 
-## 🛠️ Tech Stack
+## 🔧 Tech Stack
 
 - **Data Collection**: OpenReview API v2
 - **PDF Processing**: DeepSeek-OCR (LLM-based vision language model)
