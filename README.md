@@ -39,6 +39,4 @@ AIApproach combines three core capabilities:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-Copyright (c) 2026 Steven Li
+This library is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
