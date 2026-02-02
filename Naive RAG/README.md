@@ -2,7 +2,7 @@
 
 A simple yet complete RAG (Retrieval Augmented Generation) system implementation for retrieving information from academic papers and generating answers using large language models.
 
-## System Overview
+## 🔍 System Overview
 
 The Naive RAG system combines document retrieval with large language model reasoning to enable knowledge-based intelligent Q&A. The system processes academic papers and provides intelligent Q&A services through four steps:
 
@@ -10,13 +10,13 @@ The Naive RAG system combines document retrieval with large language model reaso
 Paper Download → Text Extraction → Vector Storage → Query & Answer
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
-### Using Google Colab (Recommended)
+### 🌐 Using Google Colab (Recommended)
 
 The easiest way to run this project is using **Google Colab**, which provides free GPU access and a pre-configured Python environment.
 
-#### Setup Steps:
+#### 🛠️ Setup Steps:
 
 1. **Open Google Colab**: Go to [Google Colab](https://colab.research.google.com/)
 
@@ -50,7 +50,7 @@ The easiest way to run this project is using **Google Colab**, which provides fr
    - `step3_build_vectordb.ipynb` - Build vector database (no GPU needed)
    - `step4_query_and_answer.ipynb` - Query and get answers (requires GPU)
 
-### Local Setup
+### 💻 Local Setup
 
 If you prefer to run locally, ensure you have:
 - Python 3.8+
@@ -62,9 +62,9 @@ Install dependencies:
 pip install openreview-py==1.54.7 chromadb sentence-transformers transformers torch vllm==0.13.0 pymupdf
 ```
 
-## File Descriptions
+## 📝 File Descriptions
 
-### Step 1: Get Papers (`step1_get_papers.ipynb`)
+### 1️⃣ Step 1: Get Papers (`step1_get_papers.ipynb`)
 - **Function**: Download research papers from OpenReview
 - **Main Operations**:
   - Query ICLR 2025 conference papers using OpenReview API v2
@@ -73,7 +73,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Dependencies**: `openreview-py` (version 1.54.7)
 - **Output**: Research paper PDF files
 
-### Step 2: Read Data (`step2_read_data.ipynb`)
+### 2️⃣ Step 2: Read Data (`step2_read_data.ipynb`)
 - **Function**: Convert PDF files to structured Markdown using LLM
 - **Main Operations**:
   - Convert PDFs to high-resolution images (2x scaling)
@@ -84,7 +84,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Dependencies**: `deepseek-ai/DeepSeek-OCR`, `vllm` (0.13.0), `PyMuPDF`
 - **Output**: Structured paper text in Markdown format
 
-### Step 3: Build Vector Database (`step3_build_vectordb.ipynb`)
+### 3️⃣ Step 3: Build Vector Database (`step3_build_vectordb.ipynb`)
 - **Function**: Generate text embeddings and build vector database for semantic search
 - **Main Operations**:
   - Generate text embedding vectors using Sentence Transformers (all-MiniLM-L6-v2)
@@ -94,7 +94,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Dependencies**: `chromadb`, `sentence-transformers`
 - **Output**: Persistent vector database (ChromaDB) containing document embeddings
 
-### Step 4: Query and Answer (`step4_query_and_answer.ipynb`)
+### 4️⃣ Step 4: Query and Answer (`step4_query_and_answer.ipynb`)
 - **Function**: Query vector database and generate answers using local large language model
 - **Main Operations**:
   - Retrieve relevant documents from ChromaDB based on similarity search (Top-K retrieval)
@@ -104,7 +104,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Dependencies**: `chromadb`, `transformers`, `torch`, `sentence-transformers`
 - **Output**: AI-generated answers with relevant document context citations
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 - **Data Collection**: OpenReview API v2
 - **PDF Processing**: DeepSeek-OCR (LLM-based vision language model)
@@ -115,7 +115,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - **Deep Learning Framework**: PyTorch
 - **Development Environment**: Jupyter Notebook / Google Colab
 
-## Usage Workflow
+## 📋 Usage Workflow
 
 1. **Prerequisites**: Install required dependencies
    ```bash
@@ -141,7 +141,7 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
    - Load HuggingFace SmolLM3-3B model (auto-download)
    - Input questions to get intelligent answers based on paper content
 
-## System Features
+## ✨ System Features
 
 - ✅ **End-to-End Pipeline**: Complete workflow from data collection to intelligent Q&A
 - ✅ **Modular Design**: Each step runs independently for easy debugging and modification
@@ -151,14 +151,14 @@ pip install openreview-py==1.54.7 chromadb sentence-transformers transformers to
 - ✅ **High-Quality Text Extraction**: LLM-based OCR preserves document structure and formulas
 - ✅ **Scalability**: Easy to add new data sources or switch models
 
-## Important Notes
+## ⚠️ Important Notes
 
 1. **Hardware Requirements**: Running DeepSeek-OCR and SmolLM3-3B requires GPU (recommended at least 8GB VRAM)
 2. **Data Storage**: Ensure sufficient disk space for PDF files, model weights, and vector database
 3. **Network Connection**: Stable internet connection required for downloading papers and initial model loading
 4. **Google Colab**: Code developed in Google Colab environment, using Google Drive for data storage
 
-## RAG System Principles
+## 🧠 RAG System Principles
 
 RAG (Retrieval Augmented Generation) combines the advantages of retrieval systems and generative AI:
 
@@ -172,7 +172,7 @@ Advantages of this approach compared to direct LLM use:
 - Not limited by LLM training data recency
 - Reduces AI hallucination
 
-## Future Improvements
+## 🔮 Future Improvements
 
 - [ ] Support more document formats (Word, HTML, etc.)
 - [ ] Implement more sophisticated text chunking strategies
@@ -181,6 +181,6 @@ Advantages of this approach compared to direct LLM use:
 - [ ] Add evaluation metrics and test sets
 - [ ] Build web interface
 
-## License
+## 📄 License
 
 Please refer to the LICENSE file in the project root directory.
