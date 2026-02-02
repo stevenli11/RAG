@@ -1,4 +1,4 @@
-# Naive RAG (Retrieval Augmented Generation) System
+# 📚 Naive RAG (Retrieval Augmented Generation) System
 
 A simple yet complete RAG (Retrieval Augmented Generation) system implementation for retrieving information from academic papers and generating answers using large language models.
 

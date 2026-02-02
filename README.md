@@ -1,4 +1,4 @@
-# AIApproach
+# 🚀 AIApproach
 
 **Transforming research from experience-driven to methodology-driven, from trial-and-error waste to optimal solution paths.**
 
