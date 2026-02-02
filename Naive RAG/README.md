@@ -67,7 +67,7 @@ Naive RAG 系统将文档检索与大语言模型推理相结合，实现基于�
 
 1. **准备工作**: 安装所需的依赖库
    ```bash
-   pip install openreview-py chromadb sentence-transformers transformers torch vllm pymupdf
+   pip install openreview-py==1.54.7 chromadb sentence-transformers transformers torch vllm==0.13.0 pymupdf
    ```
 
 2. **运行 Step 1**: 从 OpenReview 下载 ICLR 2025 会议论文
