@@ -10,6 +10,58 @@ The Naive RAG system combines document retrieval with large language model reaso
 Paper Download → Text Extraction → Vector Storage → Query & Answer
 ```
 
+## Quick Start
+
+### Using Google Colab (Recommended)
+
+The easiest way to run this project is using **Google Colab**, which provides free GPU access and a pre-configured Python environment.
+
+#### Setup Steps:
+
+1. **Open Google Colab**: Go to [Google Colab](https://colab.research.google.com/)
+
+2. **Mount Google Drive** (for data persistence):
+   ```python
+   from google.colab import drive
+   drive.mount('/content/drive')
+   ```
+
+3. **Install Dependencies**:
+   ```python
+   !pip install openreview-py==1.54.7 chromadb sentence-transformers transformers torch vllm==0.13.0 pymupdf
+   ```
+
+4. **Upload or Clone the Repository**:
+   - Option A: Upload the notebooks to your Google Drive
+   - Option B: Clone from GitHub:
+     ```python
+     !git clone https://github.com/stevenli11/RAG.git
+     %cd RAG/Naive\ RAG
+     ```
+
+5. **Enable GPU**:
+   - Go to `Runtime` → `Change runtime type`
+   - Select `T4 GPU` or higher for hardware accelerator
+   - Click `Save`
+
+6. **Run the Notebooks in Order**:
+   - `step1_get_papers.ipynb` - Download papers (no GPU needed)
+   - `step2_read_data.ipynb` - Extract text using DeepSeek-OCR (requires GPU)
+   - `step3_build_vectordb.ipynb` - Build vector database (no GPU needed)
+   - `step4_query_and_answer.ipynb` - Query and get answers (requires GPU)
+
+### Local Setup
+
+If you prefer to run locally, ensure you have:
+- Python 3.8+
+- CUDA-capable GPU with at least 8GB VRAM
+- 20GB+ free disk space
+
+Install dependencies:
+```bash
+pip install openreview-py==1.54.7 chromadb sentence-transformers transformers torch vllm==0.13.0 pymupdf
+```
+
 ## File Descriptions
 
 ### Step 1: Get Papers (`step1_get_papers.ipynb`)
