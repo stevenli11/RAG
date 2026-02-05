@@ -46,44 +46,52 @@ def clean_text(text):
     return text
 
 
-def get_config():
-    """从 Streamlit secrets 或环境变量获取配置"""
-    # 优先使用 Streamlit secrets（部署时使用）
-    # 如果本地开发，则使用环境变量或 .env 文件
-    try:
-        # 尝试从 Streamlit secrets 读取
-        secrets = st.secrets
-        
-        # DashScope API Key
-        dashscope_key = secrets.get("DASHSCOPE_API_KEY", "")
-        dashscope_base_url = secrets.get("DASHSCOPE_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        
-        # Milvus 配置
-        milvus_uri = secrets.get("MILVUS_URI", "")
-        milvus_user = secrets.get("MILVUS_USER", "")
-        milvus_password = secrets.get("MILVUS_PASSWORD", "")
-        
-        # 如果 secrets 中有值，使用 secrets
-        if dashscope_key and milvus_uri:
-            return {
-                "dashscope_key": dashscope_key.strip().strip('"').strip("'"),
-                "dashscope_base_url": dashscope_base_url,
-                "milvus_uri": milvus_uri,
-                "milvus_user": milvus_user,
-                "milvus_password": milvus_password,
-            }
-    except (AttributeError, FileNotFoundError, KeyError):
-        # Streamlit secrets 不可用，使用环境变量
-        pass
+def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=None, user_milvus_password=None):
+    """从用户输入、Streamlit secrets 或环境变量获取配置"""
+    # 优先使用用户输入的配置
+    dashscope_key = user_dashscope_key or ""
+    dashscope_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    milvus_uri = user_milvus_uri or ""
+    milvus_user = user_milvus_user or ""
+    milvus_password = user_milvus_password or ""
     
-    # 回退到环境变量
-    load_dotenv()
+    # 如果用户没有输入，尝试从 Streamlit secrets 读取
+    if not dashscope_key or not milvus_uri:
+        try:
+            secrets = st.secrets
+            
+            # DashScope API Key（如果用户未输入）
+            if not dashscope_key:
+                dashscope_key = secrets.get("DASHSCOPE_API_KEY", "")
+                dashscope_base_url = secrets.get("DASHSCOPE_API_BASE", dashscope_base_url)
+            
+            # Milvus 配置（如果用户未输入）
+            if not milvus_uri:
+                milvus_uri = secrets.get("MILVUS_URI", "")
+                milvus_user = secrets.get("MILVUS_USER", "")
+                milvus_password = secrets.get("MILVUS_PASSWORD", "")
+        except (AttributeError, FileNotFoundError, KeyError):
+            # Streamlit secrets 不可用，使用环境变量
+            pass
+    
+    # 如果还是没有，回退到环境变量
+    if not dashscope_key:
+        load_dotenv()
+        dashscope_key = os.getenv("DASHSCOPE_API_KEY", "").strip().strip('"').strip("'")
+        dashscope_base_url = os.getenv("DASHSCOPE_API_BASE", dashscope_base_url)
+    
+    if not milvus_uri:
+        load_dotenv()
+        milvus_uri = os.getenv("MILVUS_URI", "")
+        milvus_user = os.getenv("MILVUS_USER", "")
+        milvus_password = os.getenv("MILVUS_PASSWORD", "")
+    
     return {
-        "dashscope_key": os.getenv("DASHSCOPE_API_KEY", "").strip().strip('"').strip("'"),
-        "dashscope_base_url": os.getenv("DASHSCOPE_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-        "milvus_uri": os.getenv("MILVUS_URI", ""),
-        "milvus_user": os.getenv("MILVUS_USER", ""),
-        "milvus_password": os.getenv("MILVUS_PASSWORD", ""),
+        "dashscope_key": dashscope_key.strip().strip('"').strip("'") if dashscope_key else "",
+        "dashscope_base_url": dashscope_base_url,
+        "milvus_uri": milvus_uri,
+        "milvus_user": milvus_user,
+        "milvus_password": milvus_password,
     }
 
 
@@ -260,21 +268,87 @@ def main():
     with st.sidebar:
         st.header("⚙️ 配置")
         
-        # 获取配置
-        config = get_config()
+        # 初始化 session_state
+        if "dashscope_key" not in st.session_state:
+            st.session_state.dashscope_key = ""
+        if "milvus_uri" not in st.session_state:
+            st.session_state.milvus_uri = ""
+        if "milvus_user" not in st.session_state:
+            st.session_state.milvus_user = ""
+        if "milvus_password" not in st.session_state:
+            st.session_state.milvus_password = ""
+        
+        # DashScope API Key 输入
+        st.markdown("### 🔑 DashScope API Key")
+        dashscope_key_input = st.text_input(
+            "DashScope API Key",
+            value=st.session_state.dashscope_key,
+            type="password",
+            help="输入你的阿里云 DashScope API Key",
+            key="dashscope_key_input"
+        )
+        if dashscope_key_input:
+            st.session_state.dashscope_key = dashscope_key_input
+            st.caption("💡 [获取 DashScope API Key](https://dashscope.console.aliyun.com/)")
+        else:
+            st.caption("💡 请输入你的 DashScope API Key 以使用本应用")
+        
+        st.markdown("---")
+        
+        # Milvus 配置输入
+        st.markdown("### 🗄️ Milvus 配置")
+        milvus_uri_input = st.text_input(
+            "Milvus URI",
+            value=st.session_state.milvus_uri,
+            type="default",
+            help="Milvus 连接 URI",
+            key="milvus_uri_input"
+        )
+        if milvus_uri_input:
+            st.session_state.milvus_uri = milvus_uri_input
+        
+        milvus_user_input = st.text_input(
+            "Milvus User",
+            value=st.session_state.milvus_user,
+            type="default",
+            help="Milvus 用户名",
+            key="milvus_user_input"
+        )
+        if milvus_user_input:
+            st.session_state.milvus_user = milvus_user_input
+        
+        milvus_password_input = st.text_input(
+            "Milvus Password",
+            value=st.session_state.milvus_password,
+            type="password",
+            help="Milvus 密码",
+            key="milvus_password_input"
+        )
+        if milvus_password_input:
+            st.session_state.milvus_password = milvus_password_input
+        
+        st.markdown("---")
+        
+        # 获取配置（优先使用用户输入）
+        config = get_config(
+            user_dashscope_key=st.session_state.dashscope_key,
+            user_milvus_uri=st.session_state.milvus_uri,
+            user_milvus_user=st.session_state.milvus_user,
+            user_milvus_password=st.session_state.milvus_password
+        )
         
         # 检查配置
         config_ok = True
         if not config["dashscope_key"]:
             st.error("❌ DashScope API Key 未设置")
-            st.info("请在 Streamlit Cloud 的 Secrets 中设置 DASHSCOPE_API_KEY")
+            st.info("请在上方输入框中输入你的 DashScope API Key")
             config_ok = False
         else:
             st.success(f"✅ DashScope API Key 已设置 ({len(config['dashscope_key'])} 字符)")
         
         if not config["milvus_uri"] or not config["milvus_user"] or not config["milvus_password"]:
             st.error("❌ Milvus 配置未设置")
-            st.info("请在 Streamlit Cloud 的 Secrets 中设置 MILVUS_URI, MILVUS_USER, MILVUS_PASSWORD")
+            st.info("请在上方输入框中输入 Milvus 配置信息")
             config_ok = False
         else:
             st.success("✅ Milvus 配置已设置")
@@ -282,21 +356,18 @@ def main():
         st.markdown("---")
         st.markdown("### 📖 使用说明")
         st.markdown("""
-        1. **首次使用**：上传 PDF 或 TXT 文档构建向量索引
-        2. **提问**：在下方输入问题，系统会从文档中检索相关信息并生成答案
-        3. **配置**：所有密钥通过 Streamlit Secrets 管理，无需在代码中硬编码
+        1. **配置 API Key**：在上方输入你的 DashScope API Key 和 Milvus 配置
+        2. **首次使用**：上传 PDF 或 TXT 文档构建向量索引
+        3. **提问**：在下方输入问题，系统会从文档中检索相关信息并生成答案
         """)
         
         st.markdown("---")
-        st.markdown("### 🔧 Secrets 配置")
-        st.code("""
-# 在 Streamlit Cloud 的 Settings > Secrets 中添加：
-
-DASHSCOPE_API_KEY = "your_dashscope_api_key"
-DASHSCOPE_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-MILVUS_URI = "your_milvus_uri"
-MILVUS_USER = "your_milvus_user"
-MILVUS_PASSWORD = "your_milvus_password"
+        st.markdown("### 💡 提示")
+        st.info("""
+        **配置说明：**
+        - 所有配置信息仅保存在当前浏览器会话中
+        - 刷新页面后需要重新输入
+        - 配置信息不会上传到服务器，安全可靠
         """)
     
     if not config_ok:
