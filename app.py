@@ -384,9 +384,12 @@ def main():
         st.markdown("---")
         st.markdown("### 📖 How to use")
         st.markdown("""
-        1. **Configure API Key**: Enter your DashScope API Key and Milvus configuration above.
-        2. **First-time use**: Upload a PDF or TXT document to build the vector index.
-        3. **Ask questions**: Enter your question below; the system will retrieve relevant context and generate an answer.
+        1. **Configure API Key**: Enter your DashScope API Key above.  
+        2. **Milvus (optional)**:  
+           - If you **do not** enter Milvus configuration, the app will use the **author's pre-built Milvus database**.  
+           - If you **do** enter your own Milvus URI / User / Password, the app will use **your own Milvus database** for indexing and search.  
+        3. **First-time use with your own Milvus**: Upload a PDF or TXT document to build a new vector index in your Milvus instance.
+        4. **Ask questions**: Enter your question below; the system will retrieve relevant context and generate an answer.
         """)
         
         st.markdown("---")
