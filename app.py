@@ -123,7 +123,7 @@ def initialize_embeddings(config):
 
 
 @st.cache_resource
-def load_vectorstore(config, embeddings, collection_name="company_milvus"):
+def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
     """加载或创建 Milvus 向量存储（缓存）"""
     connection_args = {
         "uri": config["milvus_uri"],
@@ -134,7 +134,7 @@ def load_vectorstore(config, embeddings, collection_name="company_milvus"):
     try:
         # 尝试加载已有的 collection
         vectorstore = Milvus(
-            embedding_function=embeddings,
+            embedding_function=_embeddings,
             collection_name=collection_name,
             connection_args=connection_args
         )
