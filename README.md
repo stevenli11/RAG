@@ -1,18 +1,6 @@
 # 🚀 AIApproach
 
-**Version 1.1.0** | **Transforming research from experience-driven to methodology-driven, from trial-and-error waste to optimal solution paths.**
-
-## 🎉 What's New in V1.1
-
-### 📸 OCR Model Support
-- **Enhanced File Type Support**: Now supports image files (JPG, PNG, BMP, TIFF) and scanned PDFs
-- **Automatic OCR Processing**: Intelligent text extraction using DashScope qwen-vl-max model
-- **Smart Fallback**: Automatically detects document type and uses the best extraction method
-
-### 🧠 Intelligent Question Classification
-- **Context-Aware Prompts**: Questions are automatically classified into categories (Knowledge, Experiment, General)
-- **Tailored Responses**: Each question type receives optimized prompts for better answer quality
-- **Improved Accuracy**: More relevant and contextually appropriate responses
+**Transforming research from experience-driven to methodology-driven, from trial-and-error waste to optimal solution paths.**
 
 ## 💡 Product Philosophy
 
@@ -48,12 +36,6 @@ AIApproach combines three core capabilities:
 ---
 
 **For more details on our RAG implementation, see the [Naive RAG](./Naive%20RAG) directory.**
-
-## 📋 Version History
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
-
-Current version: **1.1.0**
 
 ## 📄 License
 
