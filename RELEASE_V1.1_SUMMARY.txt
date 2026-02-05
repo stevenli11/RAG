@@ -1,0 +1,107 @@
+=============================================================================
+                    RAG Project - Release V1.1.0 Summary
+=============================================================================
+
+Release Date: 2026-02-05
+Previous Version: 1.0.0
+Current Version: 1.1.0
+
+=============================================================================
+                          🎉 NEW FEATURES
+=============================================================================
+
+1. OCR Model Support (📸)
+   ------------------------
+   - Added support for image files: JPG, JPEG, PNG, BMP, TIFF, TIF
+   - Automatic OCR for scanned PDF documents
+   - Intelligent fallback: direct text → OCR when needed
+   - Uses DashScope qwen-vl-max model
+   - Smart document type detection
+
+2. Question Classification System (🧠)
+   ------------------------------------
+   - Automatic question classification into 3 categories:
+     * Knowledge - explanations, definitions, general knowledge
+     * Experiment - experimental design, protocols, research plans  
+     * General - other question types
+   - Dynamic prompt selection based on question type
+   - Context-aware responses for better answer quality
+
+=============================================================================
+                      📁 RELEASE DOCUMENTATION FILES
+=============================================================================
+
+Created/Updated Files:
+1. VERSION                    (6 bytes)   - Version number: 1.1.0
+2. CHANGELOG.md              (1.8 KB)    - Standard changelog format
+3. RELEASES.md               (2.2 KB)    - Chinese release notes
+4. RELEASE_NOTES_V1.1.md     (5.6 KB)    - Detailed English release notes
+5. README.md                 (2.9 KB)    - Updated with version info
+6. .github/RELEASE_GUIDE.md  (998 bytes) - GitHub release creation guide
+
+=============================================================================
+                         📊 FEATURE SUMMARY
+=============================================================================
+
+OCR Capabilities:
+- Supported image formats: 6 types (JPG, JPEG, PNG, BMP, TIFF, TIF)
+- PDF processing: Both text-based and scanned PDFs
+- Processing strategy: Intelligent fallback mechanism
+- Recognition engine: DashScope qwen-vl-max
+
+Question Classification:
+- Categories: 3 (Knowledge, Experiment, General)
+- Classification method: Automatic LLM-powered
+- Prompt templates: 3 specialized templates
+- Response quality: Enhanced through contextual prompting
+
+=============================================================================
+                      🔧 TECHNICAL IMPLEMENTATION
+=============================================================================
+
+Key Functions Added to app.py:
+1. extract_text_from_image_ocr() - Line 196
+2. pdf_to_images_for_ocr() - Line 272
+3. process_pdf_with_ocr() - Line 289
+4. classify_question_type() - Line 428
+5. get_prompt_template() - Line 465
+
+Dependencies:
+- dashscope (for OCR and LLM)
+- fitz / PyMuPDF (for PDF to image conversion)
+- PIL (for image processing)
+- langchain (existing)
+
+=============================================================================
+                     📝 NEXT STEPS FOR MAINTAINER
+=============================================================================
+
+To create the GitHub Release:
+
+1. Navigate to: https://github.com/stevenli11/RAG/releases
+2. Click "Draft a new release"
+3. Set tag: v1.1.0
+4. Set title: V1.1.0 - OCR Support & Intelligent Question Classification
+5. Copy content from RELEASE_NOTES_V1.1.md for description
+6. Click "Publish release"
+
+OR use GitHub CLI:
+  gh release create v1.1.0 \
+    --title "V1.1.0 - OCR Support & Intelligent Question Classification" \
+    --notes-file RELEASE_NOTES_V1.1.md
+
+=============================================================================
+                         ✅ COMPLETION STATUS
+=============================================================================
+
+[✓] Version files created
+[✓] Changelog documented
+[✓] Release notes written (English & Chinese)
+[✓] README updated with new version
+[✓] Release guide provided
+[✓] Features verified in code
+[✓] All files committed and pushed
+
+Status: READY FOR GITHUB RELEASE
+
+=============================================================================
