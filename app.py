@@ -327,6 +327,9 @@ def main():
         if milvus_password_input:
             st.session_state.milvus_password = milvus_password_input
         
+        # 添加 Milvus 注册链接
+        st.caption("💡 [获取 Milvus 云服务](https://zilliz.com/cloud)")
+        
         st.markdown("---")
         
         # 获取配置（优先使用用户输入）
