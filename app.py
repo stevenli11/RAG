@@ -46,6 +46,19 @@ def clean_text(text):
     return text
 
 
+def clean_metadata_key(key):
+    """清理 metadata 字段名，使其符合 Milvus 命名规范（只能包含数字、字母和下划线）"""
+    if not key:
+        return "unknown"
+    # 将不符合规范的字符替换为下划线
+    # Milvus 字段名只能包含：数字、字母、下划线
+    cleaned_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
+    # 确保字段名不为空，且不以数字开头（如果可能的话）
+    if not cleaned_key or cleaned_key[0].isdigit():
+        cleaned_key = "field_" + cleaned_key
+    return cleaned_key
+
+
 def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=None, user_milvus_password=None):
     """从用户输入、Streamlit secrets 或环境变量获取配置"""
     # 优先使用用户输入的配置
@@ -178,10 +191,12 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
             if doc.metadata:
                 cleaned_metadata = {}
                 for key, value in doc.metadata.items():
+                    # 清理字段名，使其符合 Milvus 命名规范
+                    cleaned_key = clean_metadata_key(key)
                     if isinstance(value, str):
-                        cleaned_metadata[key] = clean_text(value)
+                        cleaned_metadata[cleaned_key] = clean_text(value)
                     else:
-                        cleaned_metadata[key] = value
+                        cleaned_metadata[cleaned_key] = value
                 doc.metadata = cleaned_metadata
         
         # 文本分割
@@ -200,6 +215,16 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
             cleaned_content = clean_text(doc.page_content)
             if cleaned_content.strip():
                 doc.page_content = cleaned_content
+                # 再次清理 metadata 字段名（分割后的文档可能保留原始 metadata）
+                if doc.metadata:
+                    cleaned_metadata = {}
+                    for key, value in doc.metadata.items():
+                        cleaned_key = clean_metadata_key(key)
+                        if isinstance(value, str):
+                            cleaned_metadata[cleaned_key] = clean_text(value)
+                        else:
+                            cleaned_metadata[cleaned_key] = value
+                    doc.metadata = cleaned_metadata
                 cleaned_splits.append(doc)
         
         splits = cleaned_splits
