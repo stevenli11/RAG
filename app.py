@@ -5,6 +5,7 @@ RAG QA system built with LangChain, DashScope LLM and Milvus vector database.
 
 import os
 import re
+import base64
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -19,6 +20,8 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader
 import dashscope
 from http import HTTPStatus
 from typing import List
+from PIL import Image
+import fitz  # PyMuPDF
 
 # Page config
 st.set_page_config(
@@ -28,17 +31,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ========== 辅助函数 ==========
+# ========== Helper Functions ==========
 
 def clean_text(text):
     """Clean text and remove characters that may cause encoding issues."""
     if not text:
         return ""
-    # 移除控制字符（除了换行、制表符和回车）
+    # Remove control characters (except newline, tab, and carriage return)
     text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    # 移除零宽字符
+    # Remove zero-width characters
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060-\u206f]', '', text)
-    # 确保文本可以正确编码为 UTF-8
+    # Ensure text can be properly encoded as UTF-8
     try:
         text.encode('utf-8')
     except UnicodeEncodeError:
@@ -50,44 +53,63 @@ def clean_metadata_key(key):
     """Clean metadata field names to satisfy Milvus naming rules (only letters, numbers and underscores)."""
     if not key:
         return "unknown"
-    # 将不符合规范的字符替换为下划线
-    # Milvus 字段名只能包含：数字、字母、下划线
+    # Replace non-compliant characters with underscores
+    # Milvus field names can only contain: numbers, letters, underscores
     cleaned_key = re.sub(r'[^a-zA-Z0-9_]', '_', str(key))
-    # 确保字段名不为空，且不以数字开头（如果可能的话）
+    # Ensure field name is not empty and doesn't start with a digit (if possible)
     if not cleaned_key or cleaned_key[0].isdigit():
         cleaned_key = "field_" + cleaned_key
     return cleaned_key
 
 
+def clean_collection_name(name):
+    """Clean collection name to satisfy Milvus naming rules (only letters, numbers and underscores)."""
+    if not name:
+        return "company_milvus"
+    # Replace non-compliant characters with underscores
+    # Milvus collection names can only contain: numbers, letters, underscores
+    cleaned_name = re.sub(r'[^a-zA-Z0-9_]', '_', str(name))
+    # Remove consecutive underscores
+    cleaned_name = re.sub(r'_+', '_', cleaned_name)
+    # Remove leading/trailing underscores
+    cleaned_name = cleaned_name.strip('_')
+    # Ensure collection name is not empty and doesn't start with a digit
+    if not cleaned_name:
+        cleaned_name = "company_milvus"
+    elif cleaned_name[0].isdigit():
+        cleaned_name = "collection_" + cleaned_name
+    return cleaned_name
+
+
 def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=None, user_milvus_password=None):
     """Get config from user input, Streamlit secrets or environment variables."""
-    # 优先使用用户输入的配置
+    # Prioritize user-provided configuration
     dashscope_key = user_dashscope_key or ""
     dashscope_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     milvus_uri = user_milvus_uri or ""
     milvus_user = user_milvus_user or ""
     milvus_password = user_milvus_password or ""
     
-    # 如果用户没有输入，尝试从 Streamlit secrets 读取
+    # If user hasn't provided input, try reading from Streamlit secrets
     if not dashscope_key or not milvus_uri:
         try:
             secrets = st.secrets
             
-            # DashScope API Key（如果用户未输入）
+            # DashScope API Key (if user hasn't provided)
             if not dashscope_key:
                 dashscope_key = secrets.get("DASHSCOPE_API_KEY", "")
                 dashscope_base_url = secrets.get("DASHSCOPE_API_BASE", dashscope_base_url)
             
-            # Milvus 配置（如果用户未输入）
+            # Milvus configuration (if user hasn't provided)
             if not milvus_uri:
                 milvus_uri = secrets.get("MILVUS_URI", "")
                 milvus_user = secrets.get("MILVUS_USER", "")
                 milvus_password = secrets.get("MILVUS_PASSWORD", "")
         except (AttributeError, FileNotFoundError, KeyError):
-            # Streamlit secrets 不可用，使用环境变量
+            # Streamlit secrets not available, use environment variables
             pass
     
-    # 如果还是没有，回退到环境变量
+    # If still not found, fall back to environment variables
     if not dashscope_key:
         load_dotenv()
         dashscope_key = os.getenv("DASHSCOPE_API_KEY", "").strip().strip('"').strip("'")
@@ -146,6 +168,8 @@ def initialize_embeddings(config):
 @st.cache_resource
 def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
     """Load or create Milvus vector store (cached)."""
+    # Clean collection name to ensure it meets Milvus requirements
+    collection_name = clean_collection_name(collection_name)
     connection_args = {
         "uri": config["milvus_uri"],
         "user": config["milvus_user"],
@@ -169,21 +193,167 @@ def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
         return None
 
 
+def extract_text_from_image_ocr(image_path, config):
+    """
+    Extract text from image using DashScope Vision API (qwen-vl).
+    Uses qwen-vl-max model which has OCR capabilities.
+    """
+    try:
+        dashscope.api_key = config["dashscope_key"]
+        
+        # Read image and convert to base64
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Use DashScope MultiModalConversation API
+        from dashscope import MultiModalConversation
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "image": f"data:image/png;base64,{image_base64}"
+                    },
+                    {
+                        "text": "Please extract all text content from this image, maintaining the original format and structure. If there is no text in the image, please return 'No text content'."
+                    }
+                ]
+            }
+        ]
+        
+        response = MultiModalConversation.call(
+            model="qwen-vl-max",
+            messages=messages
+        )
+        
+        if response.status_code == HTTPStatus.OK:
+            # Extract text from response
+            try:
+                # Response structure: response.output.choices[0].message.content
+                content = response.output.choices[0].message.content
+                
+                # Handle different response formats
+                if isinstance(content, str):
+                    extracted_text = content
+                elif isinstance(content, list):
+                    # Extract text from list of content items
+                    text_parts = []
+                    for item in content:
+                        if isinstance(item, dict):
+                            if "text" in item:
+                                text_parts.append(item["text"])
+                        elif isinstance(item, str):
+                            text_parts.append(item)
+                    extracted_text = "\n".join(text_parts)
+                else:
+                    extracted_text = str(content)
+                
+                if extracted_text and extracted_text.strip() and extracted_text.strip() != "No text content":
+                    return extracted_text.strip()
+            except (AttributeError, IndexError, KeyError) as e:
+                st.warning(f"Failed to parse OCR response: {str(e)}")
+                return ""
+            
+            return ""
+        else:
+            error_msg = response.message if hasattr(response, 'message') else f"Status code: {response.status_code}"
+            st.warning(f"OCR API call failed: {error_msg}")
+            return ""
+            
+    except Exception as e:
+        st.warning(f"OCR processing failed: {str(e)}")
+        import traceback
+        st.debug(traceback.format_exc())
+        return ""
+
+
+def pdf_to_images_for_ocr(pdf_path):
+    """Convert PDF pages to images for OCR processing."""
+    doc = fitz.open(pdf_path)
+    image_paths = []
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        # Use 2x scaling for high resolution
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        image_path = f"/tmp/page_{page_num + 1}.png"
+        pix.save(image_path)
+        image_paths.append(image_path)
+    
+    doc.close()
+    return image_paths
+
+
+def process_pdf_with_ocr(pdf_path, config):
+    """
+    Process PDF: try direct text extraction first, use OCR if needed.
+    """
+    # First try direct text extraction
+    try:
+        loader = PyPDFLoader(pdf_path)
+        documents = loader.load()
+        
+        # Check if extracted text is meaningful (not empty or too short)
+        total_text = " ".join([doc.page_content for doc in documents])
+        if len(total_text.strip()) > 100:  # If we got substantial text, use it
+            return documents
+    except Exception as e:
+        st.info(f"Direct text extraction failed: {str(e)}, trying OCR...")
+    
+    # If direct extraction failed or got little text, use OCR
+    st.info("📸 Detected scanned or image PDF, using OCR processing...")
+    image_paths = pdf_to_images_for_ocr(pdf_path)
+    
+    all_text = []
+    for i, image_path in enumerate(image_paths, 1):
+        st.info(f"Processing page {i}/{len(image_paths)}...")
+        text = extract_text_from_image_ocr(image_path, config)
+        if text:
+            all_text.append(f"\n\n--- Page {i} ---\n\n{text}")
+        
+        # Clean up temporary image
+        if os.path.exists(image_path):
+            os.remove(image_path)
+    
+    # Create a single document from OCR results
+    full_text = "\n".join(all_text)
+    if full_text.strip():
+        return [Document(page_content=full_text, metadata={"source": pdf_path, "method": "ocr"})]
+    else:
+        raise ValueError("OCR failed to extract text content")
+
+
 def process_uploaded_file(uploaded_file, embeddings, config, collection_name="company_milvus"):
-    """Process uploaded file and build vector index."""
+    """Process uploaded file and build vector index. Supports PDF, TXT, and images."""
+    # Clean collection name to ensure it meets Milvus requirements
+    collection_name = clean_collection_name(collection_name)
+    
     # Save temporary file
     temp_file_path = f"/tmp/{uploaded_file.name}"
     with open(temp_file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
     try:
-        # Load documents
-        if uploaded_file.name.endswith('.pdf'):
-            loader = PyPDFLoader(temp_file_path)
-            documents = loader.load()
-        else:
+        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+        
+        # Load documents based on file type
+        if file_ext == '.pdf':
+            # Try direct extraction first, fallback to OCR
+            documents = process_pdf_with_ocr(temp_file_path, config)
+        elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+            # Image file - use OCR
+            st.info("📸 Detected image file, using OCR processing...")
+            extracted_text = extract_text_from_image_ocr(temp_file_path, config)
+            if not extracted_text.strip():
+                raise ValueError("Failed to extract text content from image")
+            documents = [Document(page_content=extracted_text, metadata={"source": uploaded_file.name, "method": "ocr"})]
+        elif file_ext == '.txt':
             loader = TextLoader(temp_file_path, encoding='utf-8')
             documents = loader.load()
+        else:
+            raise ValueError(f"Unsupported file format: {file_ext}. Supported formats: PDF, TXT, JPG, PNG, BMP, TIFF")
         
         # Clean documents
         for doc in documents:
@@ -255,10 +425,71 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
         raise e
 
 
-def create_rag_chain(graph_llm):
-    """Create RAG chain for answering questions."""
-    prompt = PromptTemplate(
-        template="""You are an immunology experiment-planning assistant.
+def classify_question_type(question, llm):
+    """Classify the type of question to select appropriate prompt template."""
+    classification_prompt = f"""Classify the following question into one of these categories:
+1. "knowledge" - Questions asking for explanations, introductions, definitions, or general knowledge (e.g., "What is X?", "Explain Y", "Briefly introduce Z")
+2. "experiment" - Questions asking for experimental design, protocols, or research plans (e.g., "Design an experiment", "How to study X", "Plan a protocol")
+3. "general" - Other types of questions
+
+Question: {question}
+
+Respond with ONLY one word: "knowledge", "experiment", or "general"."""
+    
+    try:
+        response = llm.invoke([HumanMessage(content=classification_prompt)])
+        
+        # Extract content from response
+        if hasattr(response, 'content'):
+            question_type = response.content.strip().lower()
+        else:
+            question_type = str(response).strip().lower()
+        
+        # Extract just the word if response contains extra text
+        for word in ["knowledge", "experiment", "general"]:
+            if word in question_type:
+                question_type = word
+                break
+        
+        # Validate response
+        if question_type not in ["knowledge", "experiment", "general"]:
+            # Default to general if classification is unclear
+            question_type = "general"
+        
+        return question_type
+    except Exception as e:
+        # Default to general on error
+        return "general"
+
+
+def get_prompt_template(question_type):
+    """Get appropriate prompt template based on question type."""
+    
+    if question_type == "knowledge":
+        # Knowledge-based Q&A prompt - for explanatory/introductory questions
+        # Focus: Teaching, explaining, comprehensive overview
+        return PromptTemplate(
+            template="""You are an immunology knowledge assistant. Your role is to provide educational, comprehensive explanations based on the provided context from research documents.
+
+Guidelines:
+1. Provide a well-structured, educational answer that helps the user understand the topic
+2. Start with a brief overview or definition, then elaborate with details from the context
+3. Organize information logically (e.g., use sections, bullet points, or numbered lists)
+4. Synthesize information from multiple parts of the context into a coherent explanation
+5. Use proper scientific terminology and maintain accuracy
+6. If the context doesn't fully answer the question, clearly state what can be answered and what information is missing
+
+Question: {question}
+Context: {context}
+
+Answer:""",
+            input_variables=["question", "context"],
+        )
+    
+    elif question_type == "experiment":
+        # Experiment design prompt (original)
+        return PromptTemplate(
+            template="""You are an immunology experiment-planning assistant.
 Design an executable experimental plan using ONLY the provided context. Do NOT invent parameters (e.g., concentrations, incubation times, catalog numbers, instrument models) unless explicitly stated in the context.
 
 Rules:
@@ -277,8 +508,50 @@ Answer in this format:
 - Readouts:
 - Missing critical info (if any):
 - Clarifying questions (0-3):""",
-        input_variables=["question", "context"],
-    )
+            input_variables=["question", "context"],
+        )
+    
+    else:
+        # General Q&A prompt - for factual, specific, or other types of questions
+        # Focus: Direct, concise, fact-based answers
+        return PromptTemplate(
+            template="""You are an immunology research assistant. Answer the question directly and accurately based on the provided context from research documents.
+
+Guidelines:
+1. Answer the question directly and concisely - get to the point quickly
+2. Focus on factual information from the context
+3. If the question asks for specific details (numbers, names, methods), extract and present them clearly
+4. If the context doesn't contain enough information, state what can be answered and what is missing
+5. Keep the answer focused and avoid unnecessary elaboration
+
+Question: {question}
+Context: {context}
+
+Answer:""",
+            input_variables=["question", "context"],
+        )
+
+
+def create_rag_chain(graph_llm, question=None, llm=None):
+    """
+    Create RAG chain for answering questions with adaptive prompt selection.
+    
+    Args:
+        graph_llm: LLM for generating answers
+        question: User's question (optional, for question type classification)
+        llm: LLM for question classification (optional, uses graph_llm if not provided)
+    """
+    # If question is provided, classify it and select appropriate prompt
+    if question and llm:
+        question_type = classify_question_type(question, llm)
+        prompt = get_prompt_template(question_type)
+    elif question:
+        # Use graph_llm for classification if llm not provided
+        question_type = classify_question_type(question, graph_llm)
+        prompt = get_prompt_template(question_type)
+    else:
+        # Default to experiment design prompt (backward compatibility)
+        prompt = get_prompt_template("experiment")
     
     return prompt | graph_llm | StrOutputParser()
 
@@ -302,9 +575,9 @@ def main():
             st.session_state.milvus_user = ""
         if "milvus_password" not in st.session_state:
             st.session_state.milvus_password = ""
-        
         # DashScope API Key input
         st.markdown("### 🔑 DashScope API Key")
+        
         dashscope_key_input = st.text_input(
             "DashScope API Key",
             value=st.session_state.dashscope_key,
@@ -405,7 +678,7 @@ def main():
         st.warning("⚠️ Please complete the configuration before using the app.")
         return
     
-    # 初始化组件
+    # Initialize components
     try:
         with st.spinner("🔄 Initializing LLM and embeddings..."):
             graph_llm, llm = initialize_llm(config)
@@ -427,7 +700,7 @@ def main():
                 question = st.text_area(
                     "Enter your question:",
                     height=100,
-                    placeholder="例如：What CD4+ T helper subsets are discussed in this article?"
+                    placeholder="For example：Design a minimal experiment to study CD4+ T helper cell differentiation."
                 )
                 
                 # Retrieval parameters
@@ -453,7 +726,7 @@ def main():
                                     st.text(preview)
                                     st.markdown("---")
                             
-                            # 构建上下文
+                            # Build context
                             seen = set()
                             unique_texts = []
                             for doc in docs:
@@ -470,8 +743,8 @@ def main():
                             context = context[:max_context_chars]
                         
                         with st.spinner("🤖 Generating answer..."):
-                            # Create RAG chain
-                            rag_chain = create_rag_chain(graph_llm)
+                            # Classify question type and create appropriate RAG chain
+                            rag_chain = create_rag_chain(graph_llm, question=question, llm=llm)
                             
                             # Generate answer
                             generation = rag_chain.invoke({"context": context, "question": question})
@@ -479,28 +752,104 @@ def main():
                             # Show answer
                             st.markdown("### 💡 Answer")
                             st.markdown(generation)
+                            
         
         with tab2:
             st.header("📄 Document management")
             
             st.markdown("### 📤 Upload documents")
+            
+            # File type information
+            with st.expander("ℹ️ Supported File Formats", expanded=False):
+                st.markdown("""
+                **📄 Text Files:**
+                - **PDF**: Regular PDF (direct text extraction) or scanned PDF (automatic OCR)
+                - **TXT**: Plain text file
+                
+                **🖼️ Image Files (Automatic OCR):**
+                - JPG / JPEG
+                - PNG
+                - BMP
+                - TIFF / TIF
+                
+                **💡 Tips:**
+                - Scanned documents and images will automatically use OCR to recognize text
+                - OCR processing may take some time, please be patient
+                - For better recognition results, ensure images are clear and text is readable
+                """)
+            
             uploaded_file = st.file_uploader(
-                "Choose a PDF or TXT file",
-                type=["pdf", "txt"],
-                help="Supports PDF and TXT formats."
+                "📎 Drag and drop file here or click to browse",
+                type=["pdf", "txt", "jpg", "jpeg", "png", "bmp", "tiff", "tif"],
+                help="Supports PDF, TXT, and image formats. Images and scanned documents will automatically use OCR to recognize text.",
+                label_visibility="visible"
             )
             
             if uploaded_file is not None:
-                st.info(f"📄 Selected file: {uploaded_file.name} ({uploaded_file.size / 1024:.2f} KB)")
+                # Detect file type
+                file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+                file_type_icon = "📄"
+                file_type_desc = "Document"
+                processing_method = "Text extraction"
                 
-                collection_name = st.text_input(
+                if file_ext == '.pdf':
+                    file_type_icon = "📕"
+                    file_type_desc = "PDF Document"
+                    processing_method = "Text extraction (OCR if scanned)"
+                elif file_ext == '.txt':
+                    file_type_icon = "📝"
+                    file_type_desc = "Text File"
+                    processing_method = "Direct reading"
+                elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+                    file_type_icon = "🖼️"
+                    file_type_desc = "Image File"
+                    processing_method = "OCR text recognition"
+                
+                # Display file information
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.info(f"""
+                    **{file_type_icon} {file_type_desc}**  
+                    📁 File name: `{uploaded_file.name}`  
+                    📊 Size: {uploaded_file.size / 1024:.2f} KB  
+                    🔧 Processing method: {processing_method}
+                    """)
+                
+                # If it's an image, show preview
+                if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+                    try:
+                        image = Image.open(uploaded_file)
+                        with col2:
+                            st.image(image, caption="Image preview", width=150)
+                        # Reset file pointer because Image.open() moves it
+                        uploaded_file.seek(0)
+                    except Exception as e:
+                        st.warning(f"Unable to preview image: {str(e)}")
+                
+                collection_name_input = st.text_input(
                     "Collection name",
                     value="company_milvus",
-                    help="Name of the Milvus collection used to store the vector index."
+                    help="Name of the Milvus collection used to store the vector index. Only letters, numbers, and underscores are allowed."
                 )
                 
+                # Clean collection name to ensure it meets Milvus requirements
+                collection_name = clean_collection_name(collection_name_input)
+                
+                # Show warning if name was cleaned
+                if collection_name_input != collection_name:
+                    st.warning(f"⚠️ Collection name cleaned: `{collection_name_input}` → `{collection_name}` (Milvus only allows letters, numbers, and underscores)")
+                
                 if st.button("🔨 Build vector index", type="primary"):
-                    with st.spinner("🔄 Processing document and building vector index..."):
+                    # Display different processing messages based on file type
+                    file_ext = os.path.splitext(uploaded_file.name)[1].lower() if uploaded_file else ""
+                    if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']:
+                        spinner_text = "🔄 Using OCR to recognize text in image, please wait..."
+                    elif file_ext == '.pdf':
+                        spinner_text = "🔄 Processing PDF document (OCR will be used if scanned)..."
+                    else:
+                        spinner_text = "🔄 Processing document and building vector index..."
+                    
+                    with st.spinner(spinner_text):
                         try:
                             vectorstore, num_chunks = process_uploaded_file(
                                 uploaded_file, embeddings, config, collection_name
@@ -508,7 +857,7 @@ def main():
                             st.success(f"✅ Vector index built successfully! Processed {num_chunks} document chunks.")
                             st.info("💡 You can now use this index on the 'Q&A' tab to ask questions.")
                             
-                            # 清除缓存，强制重新加载
+                            # Clear cache to force reload
                             load_vectorstore.clear()
                             
                         except Exception as e:
