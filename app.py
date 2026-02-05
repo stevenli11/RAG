@@ -1,6 +1,6 @@
 """
 Streamlit RAG Agent Application
-基于 LangChain 的 RAG 问答系统，使用 DashScope LLM 和 Milvus 向量数据库
+RAG QA system built with LangChain, DashScope LLM and Milvus vector database.
 """
 
 import os
@@ -20,9 +20,9 @@ import dashscope
 from http import HTTPStatus
 from typing import List
 
-# 页面配置
+# Page config
 st.set_page_config(
-    page_title="RAG 问答助手",
+    page_title="RAG QA Assistant",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,7 +31,7 @@ st.set_page_config(
 # ========== 辅助函数 ==========
 
 def clean_text(text):
-    """清理文本，移除可能导致编码问题的字符"""
+    """Clean text and remove characters that may cause encoding issues."""
     if not text:
         return ""
     # 移除控制字符（除了换行、制表符和回车）
@@ -47,7 +47,7 @@ def clean_text(text):
 
 
 def clean_metadata_key(key):
-    """清理 metadata 字段名，使其符合 Milvus 命名规范（只能包含数字、字母和下划线）"""
+    """Clean metadata field names to satisfy Milvus naming rules (only letters, numbers and underscores)."""
     if not key:
         return "unknown"
     # 将不符合规范的字符替换为下划线
@@ -60,7 +60,7 @@ def clean_metadata_key(key):
 
 
 def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=None, user_milvus_password=None):
-    """从用户输入、Streamlit secrets 或环境变量获取配置"""
+    """Get config from user input, Streamlit secrets or environment variables."""
     # 优先使用用户输入的配置
     dashscope_key = user_dashscope_key or ""
     dashscope_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -110,7 +110,7 @@ def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=N
 
 @st.cache_resource
 def initialize_llm(config):
-    """初始化 LLM（缓存）"""
+    """Initialize LLMs (cached)."""
     dashscope.api_key = config["dashscope_key"]
     
     graph_llm = ChatOpenAI(
@@ -132,7 +132,7 @@ def initialize_llm(config):
 
 @st.cache_resource
 def initialize_embeddings(config):
-    """初始化 Embeddings（缓存）"""
+    """Initialize embeddings (cached)."""
     dashscope.api_key = config["dashscope_key"]
     
     base_embeddings = DashScopeEmbeddings(
@@ -145,7 +145,7 @@ def initialize_embeddings(config):
 
 @st.cache_resource
 def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
-    """加载或创建 Milvus 向量存储（缓存）"""
+    """Load or create Milvus vector store (cached)."""
     connection_args = {
         "uri": config["milvus_uri"],
         "user": config["milvus_user"],
@@ -153,31 +153,31 @@ def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
     }
     
     try:
-        # 尝试加载已有的 collection
+        # Try to load existing collection
         vectorstore = Milvus(
             embedding_function=_embeddings,
             collection_name=collection_name,
             connection_args=connection_args
         )
-        # 测试是否能正常检索
+        # Test that retrieval works
         test_retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
         test_docs = test_retriever.invoke("test")
         return vectorstore
     except Exception as e:
-        st.error(f"⚠️ 无法加载已有的 collection: {e}")
-        st.info("💡 如果是首次使用，需要先上传文档并构建向量索引。")
+        st.error(f"⚠️ Failed to load existing collection: {e}")
+        st.info("💡 If this is your first time, please upload a document and build the vector index first.")
         return None
 
 
 def process_uploaded_file(uploaded_file, embeddings, config, collection_name="company_milvus"):
-    """处理上传的文件并构建向量索引"""
-    # 保存临时文件
+    """Process uploaded file and build vector index."""
+    # Save temporary file
     temp_file_path = f"/tmp/{uploaded_file.name}"
     with open(temp_file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     
     try:
-        # 加载文档
+        # Load documents
         if uploaded_file.name.endswith('.pdf'):
             loader = PyPDFLoader(temp_file_path)
             documents = loader.load()
@@ -185,13 +185,13 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
             loader = TextLoader(temp_file_path, encoding='utf-8')
             documents = loader.load()
         
-        # 清理文档
+        # Clean documents
         for doc in documents:
             doc.page_content = clean_text(doc.page_content)
             if doc.metadata:
                 cleaned_metadata = {}
                 for key, value in doc.metadata.items():
-                    # 清理字段名，使其符合 Milvus 命名规范
+                    # Clean field names to satisfy Milvus naming rules
                     cleaned_key = clean_metadata_key(key)
                     if isinstance(value, str):
                         cleaned_metadata[cleaned_key] = clean_text(value)
@@ -199,7 +199,7 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
                         cleaned_metadata[cleaned_key] = value
                 doc.metadata = cleaned_metadata
         
-        # 文本分割
+        # Text splitting
         chunk_size = 250
         chunk_overlap = 30
         text_splitter = RecursiveCharacterTextSplitter(
@@ -209,13 +209,13 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
         
         splits = text_splitter.split_documents(documents)
         
-        # 再次清理
+        # Clean again
         cleaned_splits = []
         for doc in splits:
             cleaned_content = clean_text(doc.page_content)
             if cleaned_content.strip():
                 doc.page_content = cleaned_content
-                # 再次清理 metadata 字段名（分割后的文档可能保留原始 metadata）
+                # Clean metadata field names again (split docs may keep original metadata)
                 if doc.metadata:
                     cleaned_metadata = {}
                     for key, value in doc.metadata.items():
@@ -229,7 +229,7 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
         
         splits = cleaned_splits
         
-        # 构建向量索引
+        # Build vector index
         connection_args = {
             "uri": config["milvus_uri"],
             "user": config["milvus_user"],
@@ -243,20 +243,20 @@ def process_uploaded_file(uploaded_file, embeddings, config, collection_name="co
             connection_args=connection_args
         )
         
-        # 清理临时文件
+        # Remove temporary file
         os.remove(temp_file_path)
         
         return vectorstore, len(splits)
         
     except Exception as e:
-        # 清理临时文件
+        # Remove temporary file on error
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
         raise e
 
 
 def create_rag_chain(graph_llm):
-    """创建 RAG Chain"""
+    """Create RAG chain for answering questions."""
     prompt = PromptTemplate(
         template="""You are an immunology experiment-planning assistant.
 Design an executable experimental plan using ONLY the provided context. Do NOT invent parameters (e.g., concentrations, incubation times, catalog numbers, instrument models) unless explicitly stated in the context.
@@ -283,17 +283,17 @@ Answer in this format:
     return prompt | graph_llm | StrOutputParser()
 
 
-# ========== 主应用 ==========
+# ========== Main app ==========
 
 def main():
-    st.title("🤖 RAG 问答助手")
-    st.markdown("基于 LangChain + DashScope + Milvus 的检索增强生成系统")
+    st.title("🤖 RAG QA Assistant")
+    st.markdown("Retrieval-augmented generation system powered by LangChain + DashScope + Milvus.")
     
-    # 侧边栏：配置检查
+    # Sidebar: configuration
     with st.sidebar:
-        st.header("⚙️ 配置")
+        st.header("⚙️ Configuration")
         
-        # 初始化 session_state
+        # Initialize session_state
         if "dashscope_key" not in st.session_state:
             st.session_state.dashscope_key = ""
         if "milvus_uri" not in st.session_state:
@@ -303,30 +303,30 @@ def main():
         if "milvus_password" not in st.session_state:
             st.session_state.milvus_password = ""
         
-        # DashScope API Key 输入
+        # DashScope API Key input
         st.markdown("### 🔑 DashScope API Key")
         dashscope_key_input = st.text_input(
             "DashScope API Key",
             value=st.session_state.dashscope_key,
             type="password",
-            help="输入你的阿里云 DashScope API Key",
+            help="Enter your DashScope API Key from Alibaba Cloud DashScope.",
             key="dashscope_key_input"
         )
         if dashscope_key_input:
             st.session_state.dashscope_key = dashscope_key_input
-            st.caption("💡 [获取 DashScope API Key](https://dashscope.console.aliyun.com/)")
+            st.caption("💡 [Get a DashScope API Key](https://dashscope.console.aliyun.com/)")
         else:
-            st.caption("💡 请输入你的 DashScope API Key 以使用本应用")
+            st.caption("💡 Please enter your DashScope API Key to use this app.")
         
         st.markdown("---")
         
-        # Milvus 配置输入
-        st.markdown("### 🗄️ Milvus 配置")
+        # Milvus configuration input
+        st.markdown("### 🗄️ Milvus configuration")
         milvus_uri_input = st.text_input(
             "Milvus URI",
             value=st.session_state.milvus_uri,
             type="default",
-            help="Milvus 连接 URI",
+            help="Milvus connection URI.",
             key="milvus_uri_input"
         )
         if milvus_uri_input:
@@ -336,7 +336,7 @@ def main():
             "Milvus User",
             value=st.session_state.milvus_user,
             type="default",
-            help="Milvus 用户名",
+            help="Milvus username.",
             key="milvus_user_input"
         )
         if milvus_user_input:
@@ -346,18 +346,18 @@ def main():
             "Milvus Password",
             value=st.session_state.milvus_password,
             type="password",
-            help="Milvus 密码",
+            help="Milvus password.",
             key="milvus_password_input"
         )
         if milvus_password_input:
             st.session_state.milvus_password = milvus_password_input
         
-        # 添加 Milvus 注册链接
-        st.caption("💡 [获取 Milvus 云服务](https://zilliz.com/cloud)")
+        # Milvus cloud link
+        st.caption("💡 [Get Milvus cloud (Zilliz Cloud)](https://zilliz.com/cloud)")
         
         st.markdown("---")
         
-        # 获取配置（优先使用用户输入）
+        # Get config (user input has highest priority)
         config = get_config(
             user_dashscope_key=st.session_state.dashscope_key,
             user_milvus_uri=st.session_state.milvus_uri,
@@ -365,88 +365,88 @@ def main():
             user_milvus_password=st.session_state.milvus_password
         )
         
-        # 检查配置
+        # Validate config
         config_ok = True
         if not config["dashscope_key"]:
-            st.error("❌ DashScope API Key 未设置")
-            st.info("请在上方输入框中输入你的 DashScope API Key")
+            st.error("❌ DashScope API Key is not set.")
+            st.info("Please enter your DashScope API Key in the field above.")
             config_ok = False
         else:
-            st.success(f"✅ DashScope API Key 已设置 ({len(config['dashscope_key'])} 字符)")
+            st.success(f"✅ DashScope API Key is set ({len(config['dashscope_key'])} characters).")
         
         if not config["milvus_uri"] or not config["milvus_user"] or not config["milvus_password"]:
-            st.error("❌ Milvus 配置未设置")
-            st.info("请在上方输入框中输入 Milvus 配置信息")
+            st.error("❌ Milvus configuration is not set.")
+            st.info("Please enter Milvus configuration in the fields above.")
             config_ok = False
         else:
-            st.success("✅ Milvus 配置已设置")
+            st.success("✅ Milvus configuration is set.")
         
         st.markdown("---")
-        st.markdown("### 📖 使用说明")
+        st.markdown("### 📖 How to use")
         st.markdown("""
-        1. **配置 API Key**：在上方输入你的 DashScope API Key 和 Milvus 配置
-        2. **首次使用**：上传 PDF 或 TXT 文档构建向量索引
-        3. **提问**：在下方输入问题，系统会从文档中检索相关信息并生成答案
+        1. **Configure API Key**: Enter your DashScope API Key and Milvus configuration above.
+        2. **First-time use**: Upload a PDF or TXT document to build the vector index.
+        3. **Ask questions**: Enter your question below; the system will retrieve relevant context and generate an answer.
         """)
         
         st.markdown("---")
-        st.markdown("### 💡 提示")
+        st.markdown("### 💡 Notes")
         st.info("""
-        **配置说明：**
-        - 所有配置信息仅保存在当前浏览器会话中
-        - 刷新页面后需要重新输入
-        - 配置信息不会上传到服务器，安全可靠
+        **Configuration notes:**
+        - All configuration is stored only in the current browser session.
+        - You will need to re-enter configuration after refreshing the page.
+        - Configuration is not uploaded to the server; it is intended to be safe and private.
         """)
     
     if not config_ok:
-        st.warning("⚠️ 请先完成配置后再使用")
+        st.warning("⚠️ Please complete the configuration before using the app.")
         return
     
     # 初始化组件
     try:
-        with st.spinner("🔄 正在初始化 LLM 和 Embeddings..."):
+        with st.spinner("🔄 Initializing LLM and embeddings..."):
             graph_llm, llm = initialize_llm(config)
             embeddings = initialize_embeddings(config)
         
-        # 主界面：标签页
-        tab1, tab2 = st.tabs(["💬 问答", "📄 文档管理"])
+        # Main UI: tabs
+        tab1, tab2 = st.tabs(["💬 Q&A", "📄 Document management"])
         
         with tab1:
-            st.header("💬 问答")
+            st.header("💬 Q&A")
             
-            # 加载向量存储
+            # Load vector store
             vectorstore = load_vectorstore(config, embeddings)
             
             if vectorstore is None:
-                st.warning("⚠️ 向量索引未构建，请先在「文档管理」标签页上传文档")
+                st.warning("⚠️ Vector index has not been built. Please upload documents on the 'Document management' tab first.")
             else:
-                # 问题输入
+                # Question input
                 question = st.text_area(
-                    "请输入您的问题：",
+                    "Enter your question:",
                     height=100,
                     placeholder="例如：What CD4+ T helper subsets are discussed in this article?"
                 )
                 
-                # 检索参数
-                with st.expander("🔧 检索参数"):
-                    k = st.slider("检索文档数量 (k)", min_value=1, max_value=20, value=8, step=1)
-                    max_context_chars = st.slider("最大上下文长度", min_value=1000, max_value=10000, value=6000, step=500)
+                # Retrieval parameters
+                with st.expander("🔧 Retrieval parameters"):
+                    k = st.slider("Number of documents to retrieve (k)", min_value=1, max_value=20, value=8, step=1)
+                    max_context_chars = st.slider("Maximum context length", min_value=1000, max_value=10000, value=6000, step=500)
                 
-                if st.button("🚀 提交问题", type="primary"):
+                if st.button("🚀 Submit question", type="primary"):
                     if not question.strip():
-                        st.warning("请输入问题")
+                        st.warning("Please enter a question.")
                     else:
-                        with st.spinner("🔍 正在检索相关文档..."):
-                            # 检索文档
+                        with st.spinner("🔍 Searching relevant documents..."):
+                            # Retrieve documents
                             retriever = vectorstore.as_retriever(search_kwargs={"k": k})
                             docs = retriever.invoke(question)
                             
-                            # 显示检索到的文档
-                            with st.expander(f"📚 检索到 {len(docs)} 个相关文档片段", expanded=False):
+                            # Show retrieved documents
+                            with st.expander(f"📚 Retrieved {len(docs)} relevant document chunks", expanded=False):
                                 for i, doc in enumerate(docs[:5], 1):
                                     preview = doc.page_content.replace("\n", " ")
                                     preview = (preview[:300] + "...") if len(preview) > 300 else preview
-                                    st.markdown(f"**片段 {i}** (长度: {len(doc.page_content)} 字符)")
+                                    st.markdown(f"**Chunk {i}** (length: {len(doc.page_content)} characters)")
                                     st.text(preview)
                                     st.markdown("---")
                             
@@ -466,54 +466,54 @@ def main():
                             context = "\n\n".join(unique_texts)
                             context = context[:max_context_chars]
                         
-                        with st.spinner("🤖 正在生成答案..."):
-                            # 创建 RAG Chain
+                        with st.spinner("🤖 Generating answer..."):
+                            # Create RAG chain
                             rag_chain = create_rag_chain(graph_llm)
                             
-                            # 生成答案
+                            # Generate answer
                             generation = rag_chain.invoke({"context": context, "question": question})
                             
-                            # 显示答案
-                            st.markdown("### 💡 答案")
+                            # Show answer
+                            st.markdown("### 💡 Answer")
                             st.markdown(generation)
         
         with tab2:
-            st.header("📄 文档管理")
+            st.header("📄 Document management")
             
-            st.markdown("### 📤 上传文档")
+            st.markdown("### 📤 Upload documents")
             uploaded_file = st.file_uploader(
-                "选择 PDF 或 TXT 文件",
+                "Choose a PDF or TXT file",
                 type=["pdf", "txt"],
-                help="支持 PDF 和 TXT 格式"
+                help="Supports PDF and TXT formats."
             )
             
             if uploaded_file is not None:
-                st.info(f"📄 已选择文件: {uploaded_file.name} ({uploaded_file.size / 1024:.2f} KB)")
+                st.info(f"📄 Selected file: {uploaded_file.name} ({uploaded_file.size / 1024:.2f} KB)")
                 
                 collection_name = st.text_input(
-                    "Collection 名称",
+                    "Collection name",
                     value="company_milvus",
-                    help="Milvus collection 名称，用于存储向量索引"
+                    help="Name of the Milvus collection used to store the vector index."
                 )
                 
-                if st.button("🔨 构建向量索引", type="primary"):
-                    with st.spinner("🔄 正在处理文档并构建向量索引..."):
+                if st.button("🔨 Build vector index", type="primary"):
+                    with st.spinner("🔄 Processing document and building vector index..."):
                         try:
                             vectorstore, num_chunks = process_uploaded_file(
                                 uploaded_file, embeddings, config, collection_name
                             )
-                            st.success(f"✅ 向量索引构建成功！共处理 {num_chunks} 个文档块")
-                            st.info("💡 现在可以在「问答」标签页使用该索引进行提问了")
+                            st.success(f"✅ Vector index built successfully! Processed {num_chunks} document chunks.")
+                            st.info("💡 You can now use this index on the 'Q&A' tab to ask questions.")
                             
                             # 清除缓存，强制重新加载
                             load_vectorstore.clear()
                             
                         except Exception as e:
-                            st.error(f"❌ 构建失败: {str(e)}")
+                            st.error(f"❌ Build failed: {str(e)}")
                             st.exception(e)
     
     except Exception as e:
-        st.error(f"❌ 初始化失败: {str(e)}")
+        st.error(f"❌ Initialization failed: {str(e)}")
         st.exception(e)
 
 
