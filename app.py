@@ -84,7 +84,7 @@ def get_config(user_dashscope_key=None, user_milvus_uri=None, user_milvus_user=N
                 milvus_user = secrets.get("MILVUS_USER", "")
                 milvus_password = secrets.get("MILVUS_PASSWORD", "")
         except (AttributeError, FileNotFoundError, KeyError):
-            # Streamlit secrets 不可用，使用环境变量
+            # Streamlit secrets are not available, use the environment variable
             pass
     
     # 如果还是没有，回退到环境变量
@@ -427,7 +427,7 @@ def main():
                 question = st.text_area(
                     "Enter your question:",
                     height=100,
-                    placeholder="例如：What CD4+ T helper subsets are discussed in this article?"
+                    placeholder="For example：Design a minimal experiment to study CD4+ T helper cell differentiation."
                 )
                 
                 # Retrieval parameters
