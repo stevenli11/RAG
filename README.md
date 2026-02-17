@@ -1,15 +1,15 @@
 # AIApproach
 
 <div align="center">
-  <h3>🤖 AI-Powered Retrieval-Augmented Generation System</h3>
-  <p><strong>Intelligent document Q&A with multimodal support and advanced query processing</strong></p>
+  <h3>🤖 AI‑Powered Methodology‑Aware Experimental Decision Support System</h3>
+  <p><strong>Transforms your papers and protocols into faster, cheaper, and higher‑success‑rate experimental decisions</strong></p>
 </div>
 
 ---
 
 ## Introduction
 
-A **Retrieval-Augmented Generation (RAG)** system built with **Streamlit**, **LangChain**, **DashScope LLM** (Alibaba Cloud), and **Milvus** vector database. The system enables intelligent question-answering over your documents with support for multiple file formats, OCR capabilities for images and scanned documents, and adaptive query processing.
+This system is an AI‑powered, methodology‑aware decision support tool designed to help wet‑lab researchers make faster, clearer, and more reliable experimental choices. By combining curated scientific knowledge with practical insights about real laboratory constraints, it highlights feasible strategies, surfaces alternative approaches, and guides early‑stage planning. Its purpose is to help researchers avoid unproductive directions, reduce unnecessary trial‑and‑error, and reach workable experimental designs with greater efficiency and lower cost.
 
 ### Key Features
 
