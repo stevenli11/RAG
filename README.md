@@ -1,4 +1,4 @@
-# RAG System
+# AIApproach
 
 <div align="center">
   <h3>🤖 AI-Powered Retrieval-Augmented Generation System</h3>
