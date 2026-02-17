@@ -9,7 +9,7 @@
 
 ## Introduction
 
-This is a **Retrieval-Augmented Generation (RAG)** system built with **Streamlit**, **LangChain**, **DashScope LLM** (Alibaba Cloud), and **Milvus** vector database. The system enables intelligent question-answering over your documents with support for multiple file formats, OCR capabilities for images and scanned documents, and adaptive query processing.
+A **Retrieval-Augmented Generation (RAG)** system built with **Streamlit**, **LangChain**, **DashScope LLM** (Alibaba Cloud), and **Milvus** vector database. The system enables intelligent question-answering over your documents with support for multiple file formats, OCR capabilities for images and scanned documents, and adaptive query processing.
 
 ### Key Features
 
@@ -133,7 +133,7 @@ Four specialized question types with tailored prompts:
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.9+
 - DashScope API Key (from Alibaba Cloud)
 - Milvus instance (Zilliz Cloud or self-hosted) - optional for personal use
 
@@ -326,7 +326,7 @@ File Upload → Format Detection → Text Extraction
 
 ```
 RAG/
-├── app.py                    # Main Streamlit application (1122 lines)
+├── app.py                    # Main Streamlit application
 │   ├── Helper Functions      # Text cleaning, metadata formatting
 │   ├── Config Management     # API key and database configuration
 │   ├── LLM Initialization    # DashScope model setup
@@ -456,16 +456,15 @@ RAG/
 
 ### Python Dependencies
 
-See `requirements.txt` for full list:
-- streamlit >= 1.28.0
-- langchain-openai >= 0.1.0
-- langchain-community >= 0.2.0
-- langchain-milvus >= 0.1.0
-- dashscope >= 1.17.0
-- pymilvus >= 2.3.0
-- pypdf >= 3.17.0
-- pymupdf >= 1.23.0
-- pillow >= 10.0.0
+See [`requirements.txt`](requirements.txt) for the complete and authoritative list of dependencies.
+
+Key packages include:
+- **streamlit**: Web UI framework
+- **langchain-openai, langchain-community, langchain-milvus, langchain-core**: RAG orchestration
+- **dashscope**: Alibaba Cloud DashScope SDK (LLMs and embeddings)
+- **pymilvus**: Milvus vector database client
+- **pypdf, pymupdf**: PDF processing
+- **pillow**: Image handling
 
 ### External Services
 
