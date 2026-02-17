@@ -2,7 +2,7 @@
 
 <div align="center">
   <h3>🤖 AI‑Powered Methodology‑Aware Experimental Decision Support System</h3>
-  <p><strong>Transforms your papers and protocols into faster, cheaper, and higher‑success‑rate experimental decisions</strong></p>
+  <p><strong>Helps researchers reach clearer, faster, and more reliable experimental decisions with fewer detours and lower cost</strong></p>
 </div>
 
 ---
