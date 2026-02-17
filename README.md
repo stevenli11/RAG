@@ -180,8 +180,11 @@ The application will open in your browser at `http://localhost:8501`.
    - [Get a DashScope API Key](https://dashscope.console.aliyun.com/)
 
 2. **Configure Milvus** (optional):
-   - **Without Milvus config**: Uses the author's pre-built database (demo mode)
-   - **With your own Milvus**: Enter URI, username, and password
+   - **Without Milvus config**: Uses a pre-configured demo database
+     - Sample data included for immediate testing
+     - Ideal for exploring system capabilities
+     - Not suitable for sensitive or production data
+   - **With your own Milvus**: Enter URI, username, and password for full control and privacy
    - [Get Milvus Cloud (Zilliz Cloud)](https://zilliz.com/cloud)
 
 3. **Upload Documents** (if using your own Milvus):
@@ -294,8 +297,11 @@ File Upload → Format Detection → Text Extraction
   - text-embedding-v4 (for embeddings)
 
 **Milvus Configuration** (Optional):
-- **Option 1**: Use author's pre-built database (demo mode, no configuration needed)
-- **Option 2**: Use your own Milvus instance
+- **Option 1**: Use the pre-configured demo database (no configuration needed)
+  - Contains sample data for testing and demonstration
+  - Suitable for trying out the system before setting up your own database
+  - Not recommended for production use or storing sensitive documents
+- **Option 2**: Use your own Milvus instance for full control and privacy
   - Cloud: [Zilliz Cloud](https://zilliz.com/cloud) (managed service)
   - Self-hosted: [Milvus Installation Guide](https://milvus.io/docs/install_standalone-docker.md)
 
@@ -317,6 +323,7 @@ File Upload → Format Detection → Text Extraction
 - Only letters, numbers, and underscores allowed
 - Cannot start with a digit
 - Auto-cleaning: `my-collection!` → `my_collection`
+- Default name `company_milvus` is used as a generic placeholder
 
 **Recommended Structure**:
 - Separate collections for different document types or projects
