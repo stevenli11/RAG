@@ -172,6 +172,12 @@ def initialize_embeddings(config):
 @st.cache_resource
 def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
     """Load or create Milvus vector store (cached)."""
+    import time
+    from pymilvus import Collection, MilvusException, connections, utility
+
+    _MAX_RETRY_ATTEMPTS = 3
+    _BASE_BACKOFF_SECONDS = 1
+
     # Clean collection name to ensure it meets Milvus requirements
     collection_name = clean_collection_name(collection_name)
     connection_args = {
@@ -179,22 +185,46 @@ def load_vectorstore(config, _embeddings, collection_name="company_milvus"):
         "user": config["milvus_user"],
         "password": config["milvus_password"],
     }
-    
-    try:
-        # Try to load existing collection
-        vectorstore = Milvus(
-            embedding_function=_embeddings,
-            collection_name=collection_name,
-            connection_args=connection_args
-        )
-        # Test that retrieval works
-        test_retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
-        test_docs = test_retriever.invoke("test")
-        return vectorstore
-    except Exception as e:
-        st.error(f"⚠️ Failed to load existing collection: {e}")
-        st.info("💡 If this is your first time, please upload a document and build the vector index first.")
-        return None
+
+    for attempt in range(_MAX_RETRY_ATTEMPTS):
+        try:
+            # Explicitly load the collection via pymilvus first so it is ready
+            # after the Milvus cluster wakes from sleep.
+            alias = f"_load_check_{attempt}"
+            try:
+                connections.connect(
+                    alias=alias,
+                    uri=config["milvus_uri"],
+                    user=config["milvus_user"],
+                    password=config["milvus_password"],
+                )
+                if utility.has_collection(collection_name, using=alias):
+                    col = Collection(collection_name, using=alias)
+                    col.load()
+            except MilvusException as load_err:
+                st.warning(f"⚠️ Could not pre-load collection (attempt {attempt + 1}): {load_err}")
+            finally:
+                try:
+                    connections.disconnect(alias)
+                except Exception:
+                    pass
+
+            vectorstore = Milvus(
+                embedding_function=_embeddings,
+                collection_name=collection_name,
+                connection_args=connection_args,
+            )
+            # Test that retrieval works
+            test_retriever = vectorstore.as_retriever(search_kwargs={"k": 1})
+            test_retriever.invoke("test")
+            return vectorstore
+        except Exception as e:
+            if attempt < _MAX_RETRY_ATTEMPTS - 1:
+                time.sleep(_BASE_BACKOFF_SECONDS * (2 ** attempt))
+            else:
+                st.error(f"⚠️ Failed to load existing collection: {e}")
+                st.info("💡 If this is your first time, please upload a document and build the vector index first.")
+                return None
 
 
 def extract_text_from_image_ocr(image_path, config):
