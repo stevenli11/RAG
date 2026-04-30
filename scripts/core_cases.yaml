@@ -1,0 +1,153 @@
+# RAG_local CORE eval fixtures.
+#
+# These cover the 3 protocol skills currently on the allow-list AND
+# actively prompt-optimized:
+#   - protocols/western_blot.risk_registry.md
+#   - protocols/Seahorse Real-Time Cell Metabolic Analysis.skill.md
+#   - protocols/CRISPR-Cas9.skill.md
+#
+# Eval-harness reads this by default. Use scripts/extended_cases.yaml
+# (--cases-extra) to also exercise the unoptimized methods.
+#
+# Schema reference: see header of scripts/extended_cases.yaml.
+
+cases:
+
+  # =====================================================================
+  # WESTERN BLOT (skill: western_blot.risk_registry.md)
+  # =====================================================================
+
+  - id: wb_stripping_params
+    tier: core
+    bucket: precise
+    query: "western blot stripping buffer pH and incubation conditions"
+    expected_skill_patterns: ["western_blot.risk_registry.md"]
+    expected_pmid_keywords:
+      - ["stripping", "buffer"]
+      - ["western blot", "ph"]
+    instruction_regex:
+      - "quote those values directly"
+      - "do not invent parameters"
+    require_citations: true
+
+  - id: wb_transfer_large_protein
+    tier: core
+    bucket: precise
+    query: "western blot transfer condition for 150 kDa membrane protein"
+    expected_skill_patterns: ["western_blot.risk_registry.md"]
+    expected_pmid_keywords:
+      - ["transfer", "membrane protein"]
+      - ["high molecular weight", "western"]
+    instruction_regex:
+      - "critical parameters"
+    require_citations: true
+
+  - id: wb_high_background
+    tier: core
+    bucket: troubleshoot
+    query: "western blot high background after secondary antibody troubleshooting"
+    expected_skill_patterns: ["western_blot.risk_registry.md"]
+    expected_pmid_keywords:
+      - ["background", "secondary antibody"]
+      - ["nonspecific", "blot"]
+    instruction_regex:
+      - "Lead with the practical takeaway|numbered steps"
+    require_citations: true
+
+  # =====================================================================
+  # SEAHORSE (skill: Seahorse Real-Time Cell Metabolic Analysis.skill.md)
+  # =====================================================================
+
+  - id: seahorse_low_basal_ocr
+    tier: core
+    bucket: troubleshoot
+    query: "Seahorse XF96 mito stress test basal OCR is uniformly low across most wells, what diagnostic steps and likely causes should I check?"
+    # Maps to DX-001 LOW_BASELINE_OCR in the skill.
+    expected_skill_patterns: ["Seahorse Real-Time Cell Metabolic Analysis.skill.md"]
+    expected_pmid_keywords:
+      - ["seahorse", "ocr"]
+      - ["mitochondrial respiration", "viability"]
+      - ["seeding density", "metabolic"]
+    instruction_regex:
+      - "critical parameters|numbered steps"
+    require_citations: true
+
+  - id: seahorse_weak_fccp_response
+    tier: core
+    bucket: troubleshoot
+    query: "Seahorse mito stress test FCCP injection produces only marginal OCR rise — what dosing range and confounders should I investigate?"
+    # Maps to DX-004 WEAK_FCCP_RESPONSE in the skill.
+    expected_skill_patterns: ["Seahorse Real-Time Cell Metabolic Analysis.skill.md"]
+    expected_pmid_keywords:
+      - ["fccp", "uncoupler"]
+      - ["maximal respiration", "seahorse"]
+      - ["fccp", "titration"]
+    instruction_regex:
+      - "critical parameters|numbered steps"
+    require_citations: true
+
+  - id: compound_seahorse_density_interpretation
+    tier: core
+    bucket: compound
+    query: "What cell density should I plate for a Seahorse XFe24 OCR assay on differentiated myotubes, and how should I interpret a low basal OCR with normal FCCP response?"
+    # Compound: density planning (Module 2) + result interpretation (DX-001 + DX-012).
+    expected_skill_patterns: ["Seahorse Real-Time Cell Metabolic Analysis.skill.md"]
+    expected_subquestions:
+      - "Seahorse XFe24 cell plating density for differentiated myotubes"
+      - "interpret low basal OCR with normal FCCP response"
+    expected_pmid_keywords:
+      - ["seahorse", "myotubes"]
+      - ["basal ocr", "fccp"]
+      - ["mitochondrial respiration", "interpretation"]
+    instruction_regex:
+      - "critical parameters"
+    require_citations: true
+
+  # =====================================================================
+  # CRISPR-Cas9 (skill: CRISPR-Cas9.skill.md)
+  # =====================================================================
+
+  - id: crisprcas9_sgrna_design
+    tier: core
+    bucket: precise
+    query: "How do I design and rank sgRNAs for a CRISPR-Cas9 knockout in a mammalian cell line — what design rules and validation gates should I apply before delivery?"
+    # Maps to Module 2 SGRNA_AND_DONOR_DESIGN + DX-001.
+    expected_skill_patterns: ["CRISPR-Cas9.skill.md"]
+    expected_pmid_keywords:
+      - ["sgrna", "design"]
+      - ["crispr", "knockout"]
+      - ["guide rna", "efficiency"]
+    instruction_regex:
+      - "critical parameters|numbered steps"
+    require_citations: true
+
+  - id: crisprcas9_low_editing_efficiency
+    tier: core
+    bucket: troubleshoot
+    query: "My bulk CRISPR-Cas9 editing rate is below 10% even though cell viability is above 85% — how should I diagnose whether it is a guide problem versus a delivery problem?"
+    # Maps to DX-001 in CRISPR skill (high viability + low editing → guide selection).
+    expected_skill_patterns: ["CRISPR-Cas9.skill.md"]
+    expected_pmid_keywords:
+      - ["crispr", "editing efficiency"]
+      - ["guide rna", "activity"]
+      - ["chromatin", "accessibility"]
+    instruction_regex:
+      - "do not invent parameters|critical parameters"
+    require_citations: true
+
+  - id: compound_crisprcas9_hdr_knockin
+    tier: core
+    bucket: compound
+    query: "I see good indel formation but my precise knock-in rate is below 2% — what donor design changes should I try, and how do I distinguish a donor architecture problem from a delivery problem?"
+    # Compound: donor design (Module 2) + diagnostic distinction (DX-003).
+    expected_skill_patterns: ["CRISPR-Cas9.skill.md"]
+    expected_subquestions:
+      - "HDR donor design changes to improve precise knock-in rate"
+      - "distinguish donor architecture problem from delivery problem"
+    expected_pmid_keywords:
+      - ["hdr", "knock-in"]
+      - ["ssodn", "donor"]
+      - ["pam", "blocking"]
+    instruction_regex:
+      - "critical parameters|numbered steps"
+    require_citations: true

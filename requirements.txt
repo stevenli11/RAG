@@ -1,0 +1,27 @@
+python-dotenv>=1.0.0
+langchain-openai>=0.1.0
+langchain-text-splitters>=0.2.0
+langchain-community>=0.2.0
+langchain-milvus>=0.1.0
+langchain-core>=0.2.0
+langgraph>=0.1.0
+dashscope>=1.17.0
+pymilvus>=2.3.0
+pypdf>=3.17.0
+pymupdf>=1.23.0  # For PDF to image conversion (fitz)
+pillow>=10.0.0   # For image processing (PIL)
+python-docx>=1.1.2
+
+# Local-first vector store (Phase 1): LanceDB + built-in BM25/FTS via Tantivy.
+# Default backend in RAG_local; switch back with VECTOR_BACKEND=milvus if needed.
+lancedb>=0.13.0
+tantivy>=0.22.0
+pyarrow>=15.0.0
+# Optional: free on-device embeddings (set EMBEDDING_BACKEND=local).
+# Only needed if you don't want to spend DashScope tokens on ingestion.
+sentence-transformers>=2.7.0
+langchain-huggingface>=0.1.0
+fastapi>=0.111.0
+uvicorn>=0.30.0
+sse-starlette>=2.1.0,<3.0
+PyYAML>=6.0.1

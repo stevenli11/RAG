@@ -1,0 +1,58 @@
+version: 1
+routes:
+  - id: immunotherapy
+    match_any:
+      - pd-1
+      - pd-l1
+      - checkpoint inhibitor
+      - immunotherapy
+      - nsclc
+    protocol_path: Oncology / Immunotherapy Stratification
+    risk_flags:
+      - Confirm biomarker assay platform comparability (e.g., 22C3 vs SP263)
+      - Validate threshold interpretation across cohorts
+      - Check contraindications and co-mutations before recommendation
+    required_checks:
+      - PD-L1 threshold context (>=1%, >=50%, >=90%)
+      - ECOG and comorbidity constraints
+      - Line-of-therapy consistency
+
+  - id: single_cell
+    match_any:
+      - single cell
+      - scrna
+      - scanpy
+      - leiden
+      - celltypist
+    protocol_path: Transcriptomics / scRNA-seq Core Analysis
+    risk_flags:
+      - Verify doublet filtering before annotation
+      - Ensure marker interpretation uses appropriate expression layer
+    required_checks:
+      - Species-specific marker set
+      - Batch effect handling strategy
+      - Cluster stability across resolutions
+
+  - id: wetlab_general
+    match_any:
+      - dose
+      - concentration
+      - incubation
+      - temperature
+      - protocol
+      - assay
+    protocol_path: Wet-lab / Parameter Safety Checklist
+    risk_flags:
+      - Check parameter ranges against historical practice
+      - Flag out-of-range dosage/time for manual review
+    required_checks:
+      - Unit normalization
+      - Replicate design
+      - Endpoint/readout alignment
+
+default:
+  protocol_path: General Research QA Workflow
+  risk_flags:
+    - Route question to evidence-backed response and request missing protocol details
+  required_checks:
+    - Confirm sample type and objective

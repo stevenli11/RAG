@@ -1,0 +1,48 @@
+# --- Secrets ---------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+.streamlit/secrets.toml
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# --- Node / Next.js -------------------------------------------------------
+frontend_next/node_modules/
+frontend_next/.next/
+frontend_next/out/
+frontend_next/.vercel/
+
+# --- Local vector store (rebuild via scripts/ingest_protocols_lancedb.py) -
+data/lancedb/
+
+# --- Eval / runtime artifacts --------------------------------------------
+debug/
+run.log
+*.log
+eval_*.json
+eval_*.md
+
+# --- Editor / OS ---------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+
+# --- Internal / not for public repo --------------------------------------
+context/
+notebooks/
+osu/
+slides/
+photos/
+materials/
+.devcontainer/
+*.pptx
+CLAUDE.md
+.claude/
+transfer-*.md
