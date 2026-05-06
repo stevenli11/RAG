@@ -25,7 +25,8 @@ from rag_app.services.history_compress import render_compressed_history
 # missing the rare uncommon assay name.
 _METHOD_KEYWORDS = (
     # White-listed methods (highest priority — these have skill files)
-    "western blot", "immunoblot", "phospho-akt", "phospho-",
+    "western blot", "immunoblot", "blot", "wb",
+    "phospho-akt", "phospho-", "phospho ",  # phospho with no dash + space
     "seahorse", "xf96", "xfe24", "extracellular flux", "mito stress",
     "glycolysis stress", "ocr", "ecar", "fccp", "oligomycin",
     "crispr", "cas9", "sgrna", "rnp nucleofection", "knockout", "knock-in",
@@ -48,19 +49,24 @@ def _detect_active_method_context(chat_history: List[Dict[str, Any]] | None) -> 
     """Extract carry-forward method / cell-line entities from prior turns.
 
     Returns ``{"methods": [...], "cell_lines": [...]}``. Empty lists when
-    nothing to preserve. We only scan the LAST 3 user turns since older
-    context is more likely to be stale than relevant — the user has
-    probably moved on if they haven't mentioned the method recently.
+    nothing to preserve.
+
+    Scans the FULL chat history, not just the last few turns. Earlier we
+    used ``chat_history[-3:]`` but that lost the method anchor on long
+    troubleshoot sessions where the user mentions the method ONCE in
+    turn 1 and never repeats it (e.g. "western blot" in turn 1, then
+    short follow-ups in turns 2-5 like "should I dilute" / "give me a
+    plan"). Without the anchor the rewrite drops the method, retrieval
+    picks the wrong skill, and the answer drifts to a different method.
     """
     methods: List[str] = []
     cell_lines: List[str] = []
     if not chat_history:
         return {"methods": methods, "cell_lines": cell_lines}
 
-    recent = chat_history[-3:]
     seen_m: set[str] = set()
     seen_c: set[str] = set()
-    for turn in recent:
+    for turn in chat_history:
         # Only look at the user's words — assistant might mention many
         # methods incidentally (e.g. "as a sanity check, ELISA…") that
         # would over-anchor future turns if we treated them as carry-forward.
