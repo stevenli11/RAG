@@ -9,12 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
 
-from rag_app.agent.query import rewrite_query_with_pubmed
+from rag_app.agent.query import _detect_active_method_context, rewrite_query_with_pubmed
 from rag_app.services import doc_ingest
 from rag_app.skills import (
     AnswerDirectiveSkill,
     EvidenceGradingSkill,
     EvidenceFusionSkill,
+    ObjectiveAuditSkill,
     ProtocolRetrievalSkill,
     PubmedEvidenceSkill,
     QueryRouterSkill,
@@ -96,6 +97,7 @@ class TurnExecutionResult:
     instructions: str
     rerank_status: Dict[str, Any]
     subquestions: List[str]
+    objective_audit: Dict[str, Any]
 
 
 @dataclass
@@ -123,6 +125,7 @@ class ChatOrchestrator:
         self.registry.register(ProtocolRetrievalSkill())
         self.registry.register(EvidenceGradingSkill())
         self.registry.register(AnswerDirectiveSkill())
+        self.registry.register(ObjectiveAuditSkill())
         self.registry.register(EvidenceFusionSkill())
 
     # ------------------------------------------------------------------
@@ -159,6 +162,11 @@ class ChatOrchestrator:
                     user_doc_condensed = sess.condensed
             except Exception:
                 user_doc_condensed = ""
+        # Stash for downstream skills (ObjectiveAuditSkill in particular needs
+        # to inspect the user's actual experimental numbers when deciding
+        # whether to challenge the data instead of optimising on top of it).
+        if user_doc_condensed:
+            ctx.state["_user_doc_condensed"] = user_doc_condensed
         rewrite_result = rewrite_query_with_pubmed(
             question,
             chat_history=chat_history,
@@ -175,6 +183,18 @@ class ChatOrchestrator:
             ctx.state["_pubmed_query_hints"] = pubmed_query_hints
         if subquestions:
             ctx.state["_subquestions"] = subquestions
+
+        # Carry-forward method context as a sticky-skill fallback for
+        # ProtocolRetrievalSkill. Even when rewrite_query preserves the
+        # method name in its output, retrieval is more robust if it ALSO
+        # has the explicit list of method tokens (so e.g. a query that
+        # only mentions "RIPA buffer" but had "western blot" in turn 1
+        # still picks the WB skill).
+        active_ctx = _detect_active_method_context(chat_history)
+        if active_ctx["methods"]:
+            ctx.state["_carried_methods"] = active_ctx["methods"]
+        if active_ctx["cell_lines"]:
+            ctx.state["_carried_cell_lines"] = active_ctx["cell_lines"]
 
         route = self.registry.run("query_router", ctx, question=rewritten or question)
         intent = str(route.get("intent", "knowledge"))
@@ -270,6 +290,22 @@ class ChatOrchestrator:
             quality_counts=graded.get("quality_counts", {}),
         )
 
+        # Objective audit — runs only on troubleshoot/hybrid intents that
+        # ALSO carry user data or an optimisation verb. Result is fed into
+        # evidence_fusion which prepends it as a "validity check" block at
+        # the top of the evidence so the answer LLM is forced to address
+        # data reliability before recommending tweaks.
+        audit = self.registry.run(
+            "objective_audit",
+            ctx,
+            question=question,
+            intent=intent,
+            protocol_skill_files=protocol.get("protocol_skill_files", []) or [],
+            small_llm=small_llm,
+        )
+        if audit.get("applied"):
+            ctx.state["objective_audit"] = audit
+
         fused = self.registry.run(
             "evidence_fusion",
             ctx,
@@ -278,6 +314,7 @@ class ChatOrchestrator:
             local_context=protocol.get("local_context", ""),
             answer_directive=directive.get("answer_directive", ""),
             subquestions=subquestions,
+            audit=audit if audit.get("applied") else None,
         )
 
         _maybe_dump_context(
@@ -314,6 +351,7 @@ class ChatOrchestrator:
                 "pubmed": ctx.state.get("pubmed_rerank", {}),
             },
             subquestions=subquestions,
+            objective_audit=audit if isinstance(audit, dict) else {"applied": False},
         )
 
     # ------------------------------------------------------------------

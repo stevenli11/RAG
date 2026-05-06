@@ -61,4 +61,7 @@ class ChatTurnResponse(BaseModel):
     rerank_status: Dict[str, Any] = Field(default_factory=dict)
     protocol_skill_files: List[str] = Field(default_factory=list)
     timings: Dict[str, float] = Field(default_factory=dict)
+    # ObjectiveAudit output (refuse-to-flatter signal). Empty/applied=False
+    # for non-troubleshoot or non-optimisation turns.
+    objective_audit: Dict[str, Any] = Field(default_factory=dict)
 

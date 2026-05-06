@@ -1,0 +1,98 @@
+# RAG_local AUDIT eval fixtures.
+#
+# These cases test the ObjectiveAuditSkill: each query embeds user-stated
+# experimental parameters that should trip a known DX rule in the
+# corresponding protocol skill file. The audit is expected to flag the
+# data as suspect and force `validity_check_first=true`.
+#
+# Schema:
+#   tier: audit
+#   query: str (must contain user data + an optimisation verb)
+#   expected_audit_flags: [str]   # substrings that should appear in the
+#                                 # audit's invalidating_factors / summary /
+#                                 # weakest_link (case-insensitive)
+#   expected_audit_validity_check_first: bool   # whether the skill should
+#                                               # have set this flag
+#
+# These fixtures don't depend on PubMed retrieval quality — they exist
+# ONLY to verify the audit pipeline catches plausible false-positive /
+# false-negative experimental setups.
+
+cases:
+
+  - id: audit_seahorse_density_ceiling
+    tier: audit
+    bucket: troubleshoot
+    query: |
+      I'm running a Seahorse XF96 mito stress test on differentiated myotubes
+      seeded at 30,000 cells/well. Basal OCR is uniformly low across most
+      wells (40-50 pmol/min) and FCCP fold-change is ~1.3x. What should I
+      optimise next — should I tweak the FCCP dose or change the injection
+      strategy?
+    expected_audit_flags:
+      - "density"     # density-induced ceiling
+      - "DX-001"      # rule reference for low baseline OCR
+    expected_audit_validity_check_first: true
+    require_citations: false
+
+  - id: audit_seahorse_fccp_underdose
+    tier: audit
+    bucket: troubleshoot
+    query: |
+      My Seahorse mito stress test FCCP injection produces only ~10 pmol/min
+      OCR rise at 0.25 µM final concentration. How should I improve the
+      maximal respiration readout — should I reduce baseline OCR sample size
+      or change the analysis cutoff?
+    expected_audit_flags:
+      - "fccp"
+      - "underdos"   # underdosing / under-dose
+      - "titrat"     # FCCP titration
+    expected_audit_validity_check_first: true
+    require_citations: false
+
+  - id: audit_wb_phospho_no_inhibitors
+    tier: audit
+    bucket: troubleshoot
+    query: |
+      I'm running western blot for phospho-AKT on tissue lysate. I only
+      added standard RIPA buffer during lysis (no protease or phosphatase
+      inhibitors) and the phospho-band is weak with high background. How
+      should I improve the signal — should I increase secondary antibody
+      concentration or extend ECL exposure time?
+    # Maps to B-SI-001 / B-CC-002 / B-DT-002 in western_blot.risk_registry.md:
+    # "If phospho-protection is weak, phospho-bands may disappear or
+    # background may rise before the blot is even developed."
+    expected_audit_flags:
+      - "phospho"      # phospho-protection
+      - "inhibitor"    # missing protease/phosphatase inhibitors
+    expected_audit_validity_check_first: true
+    require_citations: false
+
+  - id: audit_crispr_low_editing_high_death
+    tier: audit
+    bucket: troubleshoot
+    query: |
+      My CRISPR-Cas9 editing rate is 8% with cell viability at 30% after
+      nucleofection. Should I switch to a different sgRNA design to
+      improve editing efficiency?
+    expected_audit_flags:
+      - "viability"  # 30% viability is the real problem
+      - "delivery"   # delivery toxicity, not guide selection
+      - "DX-002"     # DX-002 in CRISPR-Cas9 skill is delivery-toxicity rule
+    expected_audit_validity_check_first: true
+    require_citations: false
+
+  - id: audit_crispr_hdr_no_pam_blocking
+    tier: audit
+    bucket: troubleshoot
+    query: |
+      I see strong indel formation (~40%) at the cut site but my precise
+      knock-in rate is 0.5%. My ssODN donor matches the genomic sequence
+      exactly with the desired single-base change. How should I increase
+      HDR efficiency — try more donor mass per reaction?
+    expected_audit_flags:
+      - "pam"        # missing PAM-blocking mutation
+      - "re-cut"     # re-cutting of repaired allele
+      - "DX-003"     # DX-003 is HDR donor architecture rule
+    expected_audit_validity_check_first: true
+    require_citations: false

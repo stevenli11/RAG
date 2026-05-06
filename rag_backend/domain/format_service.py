@@ -26,6 +26,17 @@ def sanitize_nonstandard_citation_tags(text: str) -> str:
     if not text:
         return text
     text = re.sub(r"\[(Retrieved[^\]]+)\]", r"(\1)", text, flags=re.IGNORECASE)
+    # Strip lowercase / mixed-case literal tags the LLM occasionally emits,
+    # e.g. ``[internal protocol]``, ``[Internal Protocol]``, ``[source]``.
+    # The previous regex only matched ``[A-Z]…`` (capital first letter), so
+    # lowercase-starting tags slipped through and surfaced in the rendered
+    # answer. Use IGNORECASE here to catch any casing variant.
+    text = re.sub(
+        r"\[\s*(internal protocol|internal-protocol|source|protocol)\s*\]",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     # Strip internal-protocol entry IDs: ``[X-NN]`` or ``[X-XX-NNN]``
     # patterns — at least one letter group, separated by hyphens, optionally
     # followed by digits. Lists inside one bracket are also matched

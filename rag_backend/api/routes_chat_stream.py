@@ -14,6 +14,10 @@ site below.
 - ``router``      — {intent, rewritten, subquestions}        (emitted once,  early)
 - ``retrieval``   — {protocol_skill_files, pubmed_count,     (emitted once,  after retrieval)
                      quality_counts, rerank_status, sources_topk}
+- ``audit``       — {applied, validity_check_first,           (emitted once if  ObjectiveAudit fired,
+                     risk_level, audit_summary,                otherwise omitted)
+                     invalidating_factors, user_assumptions,
+                     weakest_link}
 - ``token``       — {text}                                   (0..N times,    interleaved with answer)
 - ``references``  — {references_used, references_all,        (emitted once,  after LLM completes)
                      answer_display}
@@ -199,6 +203,14 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
             "user_doc_attached": user_doc_attached,
         },
     )
+
+    # ---- Stage 1d: objective audit (only fires on optimisation queries) -
+    # The actual LLM call already happened inside retrieve_and_fuse — this
+    # event just surfaces the audit verdict to the UI so the inspector
+    # panel can show the validity-check warning before the answer streams.
+    audit_result = dict(execution.objective_audit or {})
+    if audit_result.get("applied"):
+        yield _sse("audit", audit_result)
 
     # ---- Stage 2: stream LLM tokens ------------------------------------
     # LangChain's .stream() is synchronous, so we pull it in a thread and

@@ -269,6 +269,64 @@ def faithfulness_rate(
     return score / len(verdicts)
 
 
+def audit_flag_recall(
+    audit: Dict[str, Any] | None,
+    expected_flags: Sequence[str],
+) -> float:
+    """Fraction of ``expected_audit_flags`` that appear in the audit output.
+
+    "Appear" = case-insensitive substring match against the concatenated
+    text of ``audit_summary`` + ``weakest_link`` + every
+    ``invalidating_factors[*]`` field + every ``user_assumptions[*]``
+    field. This is a conservative recall measure: we want the audit to
+    surface every concept the test case expects, but we don't penalise
+    extra (un-expected) flags as long as the expected ones are present.
+
+    Returns 1.0 (vacuously satisfied) when ``expected_flags`` is empty.
+    Returns 0.0 if audit didn't fire (``applied=False`` or None) but
+    flags were expected — a non-fire on an expected case is a failure.
+    """
+    if not expected_flags:
+        return 1.0
+    if not audit or not audit.get("applied"):
+        return 0.0
+
+    parts: list[str] = [
+        str(audit.get("audit_summary") or ""),
+        str(audit.get("weakest_link") or ""),
+    ]
+    for f in audit.get("invalidating_factors") or []:
+        if isinstance(f, dict):
+            parts.extend(str(v or "") for v in f.values())
+    for a in audit.get("user_assumptions") or []:
+        if isinstance(a, dict):
+            parts.extend(str(v or "") for v in a.values())
+    haystack = " ".join(parts).lower()
+
+    if not haystack.strip():
+        return 0.0
+
+    hits = sum(1 for f in expected_flags if f.lower() in haystack)
+    return hits / len(expected_flags)
+
+
+def audit_validity_check_correct(
+    audit: Dict[str, Any] | None,
+    expected: bool | None,
+) -> float:
+    """1.0 if audit's ``validity_check_first`` matches ``expected``, else 0.0.
+
+    Returns 1.0 when ``expected`` is None (no expectation set).
+    """
+    if expected is None:
+        return 1.0
+    if audit is None:
+        actual = False
+    else:
+        actual = bool(audit.get("validity_check_first", False))
+    return 1.0 if actual == bool(expected) else 0.0
+
+
 def cite_rate(answer_text: str) -> float:
     """Returns 1.0 if the answer contains ≥1 numeric inline citation, else 0.0.
 
@@ -326,6 +384,10 @@ def compute_all(
     expected_subqs = list(case.get("expected_subquestions") or [])
 
     require_cites = bool(case.get("require_citations", False))
+    expected_audit_flags = list(case.get("expected_audit_flags") or [])
+    expected_validity_first = case.get("expected_audit_validity_check_first")
+    audit = response.get("objective_audit")  # may be None / {} / full dict
+
     return {
         f"recall@{k_retrieval}": recall_at_k(articles, expected_groups, k_retrieval),
         f"mrr@{k_retrieval}": mrr_at_k(articles, expected_groups, k_retrieval),
@@ -334,6 +396,10 @@ def compute_all(
         "coverage_rate": coverage_rate(answer, subqs, articles),
         "faithfulness": faithfulness_rate(verdicts, answer_text=answer, require_citations=require_cites),
         "cite_rate": cite_rate(answer),
+        "audit_flag_recall": audit_flag_recall(audit, expected_audit_flags),
+        "audit_validity_check_correct": audit_validity_check_correct(
+            audit, expected_validity_first
+        ),
         "latency_total": float(timings.get("total") or 0.0),
         "latency_generate": float(timings.get("generate") or 0.0),
         "latency_verify": float(timings.get("verify") or 0.0),

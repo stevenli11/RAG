@@ -686,12 +686,26 @@ class ProtocolRetrievalSkill:
             str(s).strip() for s in subqueries_raw if str(s).strip()
         ]
 
+        # Sticky-skill fallback: if the orchestrator stashed method tokens
+        # detected from prior turns, append them to the query BEFORE any
+        # method-detection / scoring runs. This makes short follow-ups like
+        # "should I dilute it further?" still get scored against the
+        # already-active method (e.g. western_blot) rather than picking a
+        # different skill file by accident. Carried methods are also used
+        # by ``_apply_method_focus`` indirectly via the same query string.
+        carried_methods: List[str] = list(ctx.state.get("_carried_methods") or [])
+        if carried_methods:
+            method_tag = " " + " ".join(carried_methods)
+            method_aware_query = (query or "") + method_tag
+        else:
+            method_aware_query = query
+
         # Reserve budget for local protocol skill snippets.
         skill_budget = min(5000, max(1200, int(max_context_chars * 0.45)))
         doc_budget = max(0, max_context_chars - skill_budget)
 
         protocol_skill_context, protocol_skill_files = self._build_protocol_skill_context(
-            query=query,
+            query=method_aware_query,
             intent=intent,
             max_chars=skill_budget,
         )
@@ -741,12 +755,16 @@ class ProtocolRetrievalSkill:
 
         docs = self._dedupe_docs(docs)
         docs = self._filter_docs_by_allow_list(docs=docs, allowed_skill_files=protocol_skill_files)
-        docs = self._apply_method_focus(query=query, docs=docs)
+        # Use method_aware_query for method-focus filtering so the carried
+        # method tokens also bias chunk-level filtering, not just skill-file
+        # selection. rerank stays on the user's actual query because the
+        # cross-encoder is trained on natural-language pairs.
+        docs = self._apply_method_focus(query=method_aware_query, docs=docs)
         docs = self._rerank_docs(ctx=ctx, query=query, docs=docs, top_n=max(1, k))
 
         unique_texts = [(doc.page_content or "").strip() for doc in docs if (doc.page_content or "").strip()]
         doc_param_highlights = self._extract_parameter_highlights(docs)
-        skill_param_highlights = self._extract_skill_parameter_highlights(query=query)
+        skill_param_highlights = self._extract_skill_parameter_highlights(query=method_aware_query)
         param_highlights = []
         seen_h = set()
         for line in doc_param_highlights + skill_param_highlights:

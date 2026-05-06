@@ -2,12 +2,83 @@
 
 import json
 import re
+from typing import Any, Dict, List
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 
 from rag_app.services.history_compress import render_compressed_history
+
+
+# ---------------------------------------------------------------------------
+# Method / cell-line / assay entities to keep alive across multi-turn chats.
+# When the user asks a short follow-up like "should I dilute it further?"
+# the rewriter often strips the method context, which makes downstream
+# protocol_retrieval pick the wrong skill file. We detect these entities
+# from the prior turns and inject them into the rewrite prompt as
+# "ACTIVE EXPERIMENTAL CONTEXT" so they survive into the rewritten query.
+# ---------------------------------------------------------------------------
+
+# Lower-cased substring patterns. Keep this list tight — false positives
+# that misclassify a knowledge question as method-anchored are worse than
+# missing the rare uncommon assay name.
+_METHOD_KEYWORDS = (
+    # White-listed methods (highest priority — these have skill files)
+    "western blot", "immunoblot", "phospho-akt", "phospho-",
+    "seahorse", "xf96", "xfe24", "extracellular flux", "mito stress",
+    "glycolysis stress", "ocr", "ecar", "fccp", "oligomycin",
+    "crispr", "cas9", "sgrna", "rnp nucleofection", "knockout", "knock-in",
+    "hdr", "indel",
+    # Common methods (no skill file but worth preserving for query)
+    "facs", "flow cytometry", "ihc", "immunohistochemistry",
+    "elisa", "rt-qpcr", "qpcr", "transfection", "lipofection",
+    "lentiviral", "lentivirus", "emsa", "co-ip", "mass spec",
+)
+
+# Cell lines we want carried forward verbatim if mentioned.
+_CELL_LINE_PATTERN = re.compile(
+    r"\b(HEK\s*293T?|HepG2|HeLa|MCF[\-\s]?7|K562|A549|U87|U2OS|"
+    r"BMDM|RAW\s*264\.?7|differentiated\s+myotubes?|primary\s+\w+)\b",
+    re.IGNORECASE,
+)
+
+
+def _detect_active_method_context(chat_history: List[Dict[str, Any]] | None) -> Dict[str, List[str]]:
+    """Extract carry-forward method / cell-line entities from prior turns.
+
+    Returns ``{"methods": [...], "cell_lines": [...]}``. Empty lists when
+    nothing to preserve. We only scan the LAST 3 user turns since older
+    context is more likely to be stale than relevant — the user has
+    probably moved on if they haven't mentioned the method recently.
+    """
+    methods: List[str] = []
+    cell_lines: List[str] = []
+    if not chat_history:
+        return {"methods": methods, "cell_lines": cell_lines}
+
+    recent = chat_history[-3:]
+    seen_m: set[str] = set()
+    seen_c: set[str] = set()
+    for turn in recent:
+        # Only look at the user's words — assistant might mention many
+        # methods incidentally (e.g. "as a sanity check, ELISA…") that
+        # would over-anchor future turns if we treated them as carry-forward.
+        user_text = str(turn.get("user") or "").lower()
+        if not user_text:
+            continue
+        for kw in _METHOD_KEYWORDS:
+            if kw in user_text and kw not in seen_m:
+                methods.append(kw)
+                seen_m.add(kw)
+        for cm in _CELL_LINE_PATTERN.finditer(user_text):
+            normalized = cm.group(0).strip()
+            key = normalized.lower()
+            if key not in seen_c:
+                cell_lines.append(normalized)
+                seen_c.add(key)
+
+    return {"methods": methods[:6], "cell_lines": cell_lines[:4]}
 
 # ---------------------------------------------------------------------------
 # Prompt templates – single source of truth for output format
@@ -167,6 +238,27 @@ def rewrite_query_with_pubmed(question, chat_history=None, small_llm=None, user_
             chat_history or [], small_llm=small_llm, recent_n=3
         )
 
+        # Detect carry-forward method / cell-line context from prior turns.
+        # Without this, short follow-ups like "should I dilute it further?"
+        # lose the western-blot / Seahorse anchor and protocol_retrieval picks
+        # the wrong skill file. Surface this to the LLM as a hard constraint
+        # in the rewrite — much more reliable than hoping the LLM infers it
+        # from the chat-history block.
+        active_ctx = _detect_active_method_context(chat_history)
+        method_block = ""
+        if active_ctx["methods"] or active_ctx["cell_lines"]:
+            parts = []
+            if active_ctx["methods"]:
+                parts.append("methods/assays: " + ", ".join(active_ctx["methods"]))
+            if active_ctx["cell_lines"]:
+                parts.append("cell lines: " + ", ".join(active_ctx["cell_lines"]))
+            method_block = (
+                "ACTIVE EXPERIMENTAL CONTEXT (carry forward in the rewrite — "
+                "the user is still discussing these even if the current question doesn't repeat them):\n"
+                + "\n".join(f"  - {p}" for p in parts)
+                + "\n\n"
+            )
+
         user_doc_block = ""
         if user_doc_condensed and user_doc_condensed.strip():
             # Trim to avoid blowing up small_llm context; the condensed doc is
@@ -179,13 +271,26 @@ def rewrite_query_with_pubmed(question, chat_history=None, small_llm=None, user_
                 f"<doc>\n{doc_excerpt}\n</doc>\n\n"
             )
 
-        prompt = f"""{history_context}{user_doc_block}Current question: {question}
+        prompt = f"""{history_context}{method_block}{user_doc_block}Current question: {question}
 
 Produce a single JSON object with FOUR fields describing how to retrieve evidence for this question:
 
 1. "rewritten": A clear, specific restatement of the question for semantic
    search — resolve pronouns using the conversation above, make implied
    terms explicit, keep the core meaning unchanged. One sentence.
+
+   CRITICAL — preserve the ACTIVE EXPERIMENTAL CONTEXT block above:
+   - If the user has been discussing "western blot" (or "phospho-AKT",
+     "Seahorse", "CRISPR", etc.) in prior turns, the rewrite MUST mention
+     that method explicitly — even if the current short follow-up like
+     "should I dilute it further?" or "give me a step-by-step plan" omits
+     the method name. Without it, the downstream protocol retriever picks
+     the WRONG skill file and the answer drifts to a different method.
+   - Same for cell line: if HEK293T / HepG2 / etc. was mentioned earlier,
+     keep it.
+   - Example: "should I dilute it further?" with active method = "western
+     blot, phospho-AKT" → rewrite to "Should I further dilute the secondary
+     antibody for my phospho-AKT western blot, currently at 1:5000?"
 
 2. "subquestions": A list of 0-3 atomic sub-questions IF the current question
    is COMPOUND (asks multiple distinct things, e.g. "compare A vs B AND what

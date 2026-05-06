@@ -1,5 +1,8 @@
 from .metrics import (
     aggregate,
+    audit_flag_recall,
+    audit_validity_check_correct,
+    cite_rate,
     compute_all,
     coverage_rate,
     faithfulness_rate,
@@ -14,6 +17,9 @@ __all__ = [
     "DIMENSION_LABELS",
     "DIMENSIONS",
     "aggregate",
+    "audit_flag_recall",
+    "audit_validity_check_correct",
+    "cite_rate",
     "compute_all",
     "coverage_rate",
     "faithfulness_rate",
