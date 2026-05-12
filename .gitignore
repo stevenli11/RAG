@@ -46,3 +46,16 @@ materials/
 CLAUDE.md
 .claude/
 transfer-*.md
+
+# Non-whitelisted skill files (local-only, not for public repo)
+protocols/CRISPR Knockout.skill.md
+protocols/Electrophoretic Mobility Shift Assay (EMSA).skill.md
+protocols/Immunofluorescence.skill.md
+protocols/Lentiviral Transduction.skill.md
+protocols/Transfection.skill.md
+protocols/cell_culture.skill.md
+protocols/flow_cytometry.skill.md
+protocols/method_seven_ELISA.skill.md
+protocols/rt_qpcr.skill.md
+protocols/western_blot.skill.md
+scripts/extended_cases.yaml
