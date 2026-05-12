@@ -64,4 +64,8 @@ class ChatTurnResponse(BaseModel):
     # ObjectiveAudit output (refuse-to-flatter signal). Empty/applied=False
     # for non-troubleshoot or non-optimisation turns.
     objective_audit: Dict[str, Any] = Field(default_factory=dict)
+    # Map of inline protocol-rule references found in the answer
+    # ({token: {id, description, source_file, section_title, full_text}}).
+    # Frontend renders these as hover tooltips next to the rule ID.
+    rule_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 

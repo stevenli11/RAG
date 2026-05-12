@@ -33,6 +33,7 @@ type Turn = {
   referencesUsed: RefItem[];
   referencesAll: RefItem[];
   citationVerdicts: CiteVerdict[];
+  ruleRefs: Record<string, RuleRef>;
   followups: string[];
   error?: string;
 };
@@ -44,10 +45,19 @@ type CiteVerdict = {
   claim: string;
 };
 
+type RuleRef = {
+  id: string;
+  description: string;
+  source_file: string;
+  section_title: string;
+  full_text: string;
+};
+
 type InlineCtx = {
   numberedRefMap: Map<number, RefItem>;
   verdictMap?: Map<number, CiteVerdict["status"]>;
   verdictReasonMap?: Map<number, string>;
+  ruleRefs?: Record<string, RuleRef>;
 };
 
 type AttachedDoc = {
@@ -155,7 +165,12 @@ function parseSseFrame(frame: string): { event: string; data: unknown } | null {
 
 function renderInline(text: string, ctx: InlineCtx): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const tokenRe = /(\[internal protocol(?:[;:]?\s*\d+(?:\s*,\s*\d+)*)?\]|\[\d+(?:\s*,\s*\d+)*\]|PMID[:\s]*\d+|\*\*[^*]+\*\*|`[^`]+`)/g;
+  // Token alternatives, ORDER MATTERS — more specific patterns first so a
+  // rule-ID token like ``[B-CC-021]`` doesn't accidentally get parsed as a
+  // generic word-bracket. Added two new alternatives for protocol-rule
+  // references: ``[DX-NNN]`` / ``[RULE DX-NNN]`` (Seahorse / CRISPR) and
+  // ``[X-XX-NNN]`` (WB risk_registry).
+  const tokenRe = /(\[internal protocol(?:[;:]?\s*\d+(?:\s*,\s*\d+)*)?\]|\[\d+(?:\s*,\s*\d+)*\]|\[(?:RULE\s+)?DX-\d{3}\]|\[[A-Z]-[A-Z]{2}-\d{3}\]|PMID[:\s]*\d+|\*\*[^*]+\*\*|`[^`]+`)/g;
   let last = 0;
   let key = 0;
 
@@ -247,6 +262,34 @@ function renderInline(text: string, ctx: InlineCtx): ReactNode[] {
           ),
         );
       });
+    } else if (
+      /^\[(?:RULE\s+)?DX-\d{3}\]$/.test(token) ||
+      /^\[[A-Z]-[A-Z]{2}-\d{3}\]$/.test(token)
+    ) {
+      // Protocol-rule reference. Look up in ctx.ruleRefs (the registry
+      // payload from the `references` SSE event) and render with a hover
+      // popover, exactly like a PubMed cite — except the link is to the
+      // skill file section rather than a public URL.
+      const innerKey = token.slice(1, -1);
+      const entry = ctx.ruleRefs?.[innerKey];
+      nodes.push(
+        entry ? (
+          <span key={`rule-${key++}`} className="rule-wrap">
+            <span className="rule-link" tabIndex={0}>
+              {token}
+            </span>
+            <span role="tooltip" className="rule-pop">
+              <strong>{entry.section_title || entry.id}</strong>
+              <em>{entry.description}</em>
+              <small>from {entry.source_file}</small>
+            </span>
+          </span>
+        ) : (
+          <span key={`rule-missing-${key++}`} className="rule-missing" title="Unknown rule id">
+            {token}
+          </span>
+        ),
+      );
     } else if (/^PMID[:\s]*\d+$/i.test(token)) {
       const pmid = token.replace(/\D+/g, "");
       nodes.push(
@@ -579,6 +622,7 @@ export default function Page() {
       referencesUsed: [],
       referencesAll: [],
       citationVerdicts: [],
+      ruleRefs: {},
       followups: [],
     };
 
@@ -669,6 +713,10 @@ export default function Page() {
                   ...turn,
                   referencesUsed: (payload.references_used as RefItem[]) || [],
                   referencesAll: (payload.references_all as RefItem[]) || [],
+                  // ``rule_refs`` is a {token → RuleRef} map for inline
+                  // protocol-rule popovers, e.g. ``[B-CC-021]`` / ``[DX-001]``.
+                  ruleRefs:
+                    (payload.rule_refs as Record<string, RuleRef>) || {},
                 }));
                 break;
               case "citations":
@@ -941,7 +989,7 @@ export default function Page() {
                         <span>{status === "routing" ? "Classifying question and rewriting query…" : status === "retrieving" ? "Searching PubMed and protocol memory…" : "Initializing stream…"}</span>
                       </div>
                     )}
-                    {turn.answer && <div className="answer-body">{renderAnswerBlocks(turn.answer, { numberedRefMap: refMap, verdictMap, verdictReasonMap })}</div>}
+                    {turn.answer && <div className="answer-body">{renderAnswerBlocks(turn.answer, { numberedRefMap: refMap, verdictMap, verdictReasonMap, ruleRefs: turn.ruleRefs })}</div>}
                     {turn.error && <div className="error-banner">{turn.error}</div>}
 
                     {(turn.sourcesTopK.length > 0 || turn.referencesAll.length > 0) && (

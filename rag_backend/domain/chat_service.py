@@ -11,6 +11,7 @@ import time
 
 from rag_app.agent.citation_verify import verify_citations
 from rag_app.agent.query import create_rag_chain
+from rag_app.services.rule_extractor import build_rule_refs_for_answer
 from rag_app.runner.orchestrator import ChatOrchestrator, RouteResult, TurnExecutionResult
 from rag_app.services.follow_up import generate_follow_up_questions
 
@@ -34,12 +35,15 @@ class ChatTurnResult:
     # callers can ignore these.
     citation_verdicts: List[Dict[str, Any]] = None  # type: ignore[assignment]
     timings: Dict[str, float] = None  # type: ignore[assignment]
+    rule_refs: Dict[str, Dict[str, Any]] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.citation_verdicts is None:
             self.citation_verdicts = []
         if self.timings is None:
             self.timings = {}
+        if self.rule_refs is None:
+            self.rule_refs = {}
 
 
 class ChatService:
@@ -231,6 +235,15 @@ class ChatService:
             if label not in sources_topk:
                 sources_topk.append(label)
 
+        # Build rule_refs map: every protocol-rule ID the LLM inlined that
+        # resolves to a known registry entry gets its description attached
+        # for the frontend's hover popover. Hallucinated IDs were already
+        # stripped by ``sanitize_nonstandard_citation_tags`` above.
+        rule_refs = build_rule_refs_for_answer(
+            answer_raw,
+            protocol_skill_files=execution.protocol_skill_files,
+        )
+
         return {
             "answer_raw": answer_raw,
             "answer_display": answer_display,
@@ -238,6 +251,7 @@ class ChatService:
             "references_all": references_all,
             "sources_topk": sources_topk,
             "appended_anchor": appended_anchor,
+            "rule_refs": rule_refs,
         }
 
     def verify_answer_citations(
@@ -381,4 +395,5 @@ class ChatService:
             execution=execution,
             citation_verdicts=verdicts,
             timings=timings,
+            rule_refs=dict(finalized.get("rule_refs") or {}),
         )

@@ -20,7 +20,7 @@ site below.
                      weakest_link}
 - ``token``       — {text}                                   (0..N times,    interleaved with answer)
 - ``references``  — {references_used, references_all,        (emitted once,  after LLM completes)
-                     answer_display}
+                     answer_display, rule_refs}
 - ``citations``   — {verdicts}                                (emitted once,  after references; best-effort)
 - ``followups``   — {questions}                              (emitted once,  best-effort)
 - ``done``        — {}                                       (always last on success)
@@ -305,6 +305,12 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
             "references_used": [_reference_dict(a) for a in finalized["references_used"]],
             "references_all": [_reference_dict(a) for a in finalized["references_all"]],
             "answer_display": finalized["answer_display"],
+            # Map of every protocol-rule ID inlined in the answer to its
+            # registry entry (description, source_file, full_text). The
+            # frontend uses this to render hover tooltips on tokens like
+            # ``[B-CC-021]`` or ``[DX-004]`` exactly the way PubMed cites
+            # already get hover popovers.
+            "rule_refs": dict(finalized.get("rule_refs") or {}),
         },
     )
 

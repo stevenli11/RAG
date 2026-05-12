@@ -6,51 +6,71 @@ import re
 
 
 def sanitize_nonstandard_citation_tags(text: str) -> str:
-    """Replace non-standard bracket tags like [Retrieved ...] / [B-CC-021] with
-    plain notes so they don't get mistaken for citations downstream.
+    """Sanitise stray bracket tokens in the LLM answer.
 
-    Two failure modes this fixes:
-      1. ``[Retrieved protocol context #N]`` style bracketed prose tags — old.
-      2. Internal-protocol entry IDs (``[B-CC-021]``, ``[B-DT-022]``,
-         ``[DX-001]``, ``[RULE DX-009]``, etc.) that LLMs occasionally
-         use as faux citations after seeing them in the evidence block.
-         These tokens are alphanumeric+hyphen only — they never collide
-         with the legitimate numeric ``[1]`` / ``[1, 3]`` cite format,
-         so it's safe to strip them out.
+    Policy:
+      - ``[1]`` / ``[2, 3]`` — numeric PubMed citations: ALWAYS keep.
+      - ``[B-CC-021]`` / ``[DX-001]`` / ``[RULE DX-003]`` — these are
+        legitimate references to internal protocol rules WHEN they map
+        to a known entry in the rule registry. KEEP them so the frontend
+        can render hover popovers showing the rule description.
+      - ``[B-XX-XXX]`` shaped tokens that DON'T resolve to any known rule
+        — strip (the LLM made one up).
+      - ``[internal protocol]`` / ``[Retrieved ...]`` / ``[source]`` —
+        narrative placeholders: strip.
 
-    The cite-extractor downstream (``extract_cited_reference_indices``) only
-    matches ``[(\\d+(?:\\s*,\\s*\\d+)*)]``, so these alphanumeric brackets
-    don't get counted as cites either way; this sanitizer's job is to keep
-    them from polluting the rendered answer text the user sees.
+    The previous behaviour was to strip ALL alphanumeric bracket tokens
+    indiscriminately, which threw away legitimate rule references the
+    user wanted to look up. The shift to a whitelist via the rule
+    registry keeps the useful refs and only nukes hallucinated ones.
     """
     if not text:
         return text
+
+    # ``[Retrieved …]`` → ``(Retrieved …)`` (legacy behaviour).
     text = re.sub(r"\[(Retrieved[^\]]+)\]", r"(\1)", text, flags=re.IGNORECASE)
-    # Strip lowercase / mixed-case literal tags the LLM occasionally emits,
-    # e.g. ``[internal protocol]``, ``[Internal Protocol]``, ``[source]``.
-    # The previous regex only matched ``[A-Z]…`` (capital first letter), so
-    # lowercase-starting tags slipped through and surfaced in the rendered
-    # answer. Use IGNORECASE here to catch any casing variant.
+    # Narrative-only placeholders the LLM still occasionally writes.
     text = re.sub(
         r"\[\s*(internal protocol|internal-protocol|source|protocol)\s*\]",
         "",
         text,
         flags=re.IGNORECASE,
     )
-    # Strip internal-protocol entry IDs: ``[X-NN]`` or ``[X-XX-NNN]``
-    # patterns — at least one letter group, separated by hyphens, optionally
-    # followed by digits. Lists inside one bracket are also matched
-    # (``[B-CC-021, B-DT-022]``).
-    def _strip_internal(m: re.Match) -> str:
-        body = m.group(1)
-        tokens = [t.strip() for t in body.split(",")]
-        # Only drop if EVERY comma-separated token looks like an internal ID.
-        if tokens and all(re.fullmatch(r"[A-Z]+(?:-[A-Z]+)*-?\d+", t) for t in tokens):
-            return ""
-        return m.group(0)
 
-    text = re.sub(r"\[([A-Z][A-Za-z0-9,\-\s]*)\]", _strip_internal, text)
-    # Collapse any double-spaces left behind by a removed bracket.
+    # Now the interesting case: alphanumeric IDs. Keep KNOWN rules,
+    # strip unknown ones. Import lazily to avoid a circular import at
+    # module load (format_service is itself imported by chat_service
+    # while rag_app may not be initialised yet in some test paths).
+    try:
+        from rag_app.services.rule_extractor import lookup_rule
+    except Exception:
+        lookup_rule = None  # type: ignore[assignment]
+
+    def _process_alpha_bracket(m: re.Match) -> str:
+        body = m.group(1)
+        raw_tokens = [t.strip() for t in body.split(",") if t.strip()]
+        if not raw_tokens:
+            return m.group(0)
+        # If EVERY token resolves to a known rule, keep the whole bracket.
+        if lookup_rule is not None and all(lookup_rule(t) is not None for t in raw_tokens):
+            return m.group(0)
+        # If NO token is a rule-id-shape, also keep (probably real content).
+        if not any(
+            re.fullmatch(r"(?:RULE\s+)?[A-Z]+(?:-[A-Z]+)*-?\d+", t) for t in raw_tokens
+        ):
+            return m.group(0)
+        # Mix or all-unknown rule-shaped → likely hallucinated, strip.
+        return ""
+
+    # Match brackets whose contents look like rule IDs (uppercase + digits
+    # + hyphens + optional comma-separated list + optional 'RULE ' prefix).
+    text = re.sub(
+        r"\[([A-Z][A-Za-z0-9,\-\s]*?)\]",
+        _process_alpha_bracket,
+        text,
+    )
+
+    # Collapse double-spaces / dangling punctuation left by a removed bracket.
     text = re.sub(r"  +", " ", text)
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     return text

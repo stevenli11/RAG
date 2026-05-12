@@ -75,5 +75,6 @@ def chat_turn(req: ChatTurnRequest) -> ChatTurnResponse:
         protocol_skill_files=list(result.execution.protocol_skill_files or []),
         timings=dict(result.timings or {}),
         objective_audit=dict(result.execution.objective_audit or {"applied": False}),
+        rule_refs=dict(result.rule_refs or {}),
     )
 

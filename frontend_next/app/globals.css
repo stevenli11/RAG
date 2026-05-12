@@ -703,6 +703,88 @@ button {
   pointer-events: auto;
 }
 
+/* Protocol-rule reference pill — mirrors .cite-link but uses a different
+   colour ramp (violet) so users can tell at a glance whether a bracketed
+   token is a PubMed citation or an internal rule. Hovering shows the
+   rule's description (registry entry). */
+.rule-wrap {
+  position: relative;
+  display: inline-block;
+}
+.rule-link {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border: 1px solid rgba(124, 58, 237, 0.45);
+  border-radius: 6px;
+  background: rgba(124, 58, 237, 0.10);
+  color: #6d28d9;
+  font-size: 0.85em;
+  font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  cursor: help;
+  user-select: none;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+.rule-link:hover,
+.rule-link:focus-visible {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(124, 58, 237, 0.7);
+  outline: none;
+}
+.rule-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  z-index: 50;
+  min-width: 280px;
+  max-width: 440px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-elevated, #fff);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  font-size: 0.85em;
+  line-height: 1.45;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rule-pop strong {
+  color: var(--text-strong, #0f172a);
+  font-size: 0.95em;
+}
+.rule-pop em {
+  font-style: normal;
+  color: var(--text-soft, #334155);
+}
+.rule-pop small {
+  color: var(--text-faint, #64748b);
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+}
+.rule-wrap:hover .rule-pop,
+.rule-wrap:focus-within .rule-pop {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.rule-missing {
+  display: inline-block;
+  padding: 0 4px;
+  color: var(--text-faint, #64748b);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.85em;
+  border-bottom: 1px dotted rgba(100, 116, 139, 0.5);
+  cursor: help;
+}
+
 /* Citation faithfulness verdict styling.
    - supported: subtle green underline, no badge needed (the default).
    - partial: amber underline + tooltip badge.
