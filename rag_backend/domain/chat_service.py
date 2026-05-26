@@ -14,6 +14,7 @@ from rag_app.agent.query import create_rag_chain
 from rag_app.services.rule_extractor import build_rule_refs_for_answer
 from rag_app.runner.orchestrator import ChatOrchestrator, RouteResult, TurnExecutionResult
 from rag_app.services.follow_up import generate_follow_up_questions
+from rag_app.services.memory import MemoryProvider, MemoryScope, MemoryWrite, get_memory_provider
 
 from .citation_service import extract_cited_reference_indices, linkify_citations
 from .format_service import sanitize_nonstandard_citation_tags, soft_wrap_long_lines
@@ -36,6 +37,7 @@ class ChatTurnResult:
     citation_verdicts: List[Dict[str, Any]] = None  # type: ignore[assignment]
     timings: Dict[str, float] = None  # type: ignore[assignment]
     rule_refs: Dict[str, Dict[str, Any]] = None  # type: ignore[assignment]
+    memory: Dict[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.citation_verdicts is None:
@@ -44,6 +46,8 @@ class ChatTurnResult:
             self.timings = {}
         if self.rule_refs is None:
             self.rule_refs = {}
+        if self.memory is None:
+            self.memory = {}
 
 
 class ChatService:
@@ -64,6 +68,8 @@ class ChatService:
         chat_history: List[Dict[str, Any]],
         small_llm: Any,
         session_id: str | None = None,
+        memory_scope: MemoryScope | None = None,
+        memory_provider: MemoryProvider | None = None,
     ) -> RouteResult:
         """Phase 1: rewrite + intent classification (~2-3s).
 
@@ -76,6 +82,8 @@ class ChatService:
             chat_history=chat_history,
             small_llm=small_llm,
             session_id=session_id,
+            memory_scope=memory_scope,
+            memory_provider=memory_provider,
         )
 
     def retrieve_and_fuse(
@@ -111,6 +119,9 @@ class ChatService:
         retrieval_k: int,
         pubmed_max_results: int,
         max_context_chars: int,
+        session_id: str | None = None,
+        memory_scope: MemoryScope | None = None,
+        memory_provider: MemoryProvider | None = None,
     ) -> TurnExecutionResult:
         """Legacy single-shot: route + retrieve + fuse in one call."""
         return self.orchestrator.run_turn(
@@ -122,6 +133,9 @@ class ChatService:
             retrieval_k=retrieval_k,
             pubmed_max_results=pubmed_max_results,
             max_context_chars=max_context_chars,
+            session_id=session_id,
+            memory_scope=memory_scope,
+            memory_provider=memory_provider,
         )
 
     def stream_answer_tokens(
@@ -318,10 +332,14 @@ class ChatService:
         pubmed_max_results: int,
         max_context_chars: int,
         generate_followups: bool = True,
+        session_id: str | None = None,
+        memory_scope: MemoryScope | None = None,
+        memory_enabled: bool = True,
     ) -> ChatTurnResult:
         # Per-stage timings — populated even on error paths so the eval
         # harness can detect "where the slow turn was slow".
         timings: Dict[str, float] = {}
+        memory_provider = get_memory_provider(config) if memory_enabled else None
 
         t0 = time.perf_counter()
         execution = self.prepare_execution(
@@ -333,6 +351,9 @@ class ChatService:
             retrieval_k=retrieval_k,
             pubmed_max_results=pubmed_max_results,
             max_context_chars=max_context_chars,
+            session_id=session_id,
+            memory_scope=memory_scope,
+            memory_provider=memory_provider,
         )
         timings["prepare"] = time.perf_counter() - t0
 
@@ -362,6 +383,27 @@ class ChatService:
             small_llm=small_llm,
         )
         timings["verify"] = time.perf_counter() - t3
+
+        memory_status = dict(execution.memory or {})
+        if memory_provider and memory_scope and memory_enabled:
+            t_mem = time.perf_counter()
+            try:
+                write_status = memory_provider.write(
+                    scope=memory_scope,
+                    turn=MemoryWrite(
+                        question=question,
+                        answer=answer_raw,
+                        rewritten_question=execution.rewritten_question,
+                        intent=execution.intent,
+                        subquestions=list(execution.subquestions or []),
+                        references=list(finalized["references_used"] or []),
+                        metadata={"route": "chat_turn"},
+                    ),
+                )
+                memory_status["write"] = write_status
+            except Exception as exc:
+                memory_status["write"] = {"provider": memory_provider.name, "stored": False, "error": str(exc)}
+            timings["memory_write"] = time.perf_counter() - t_mem
 
         follow_ups: List[str] = []
         if generate_followups:
@@ -396,4 +438,5 @@ class ChatService:
             citation_verdicts=verdicts,
             timings=timings,
             rule_refs=dict(finalized.get("rule_refs") or {}),
+            memory=memory_status,
         )

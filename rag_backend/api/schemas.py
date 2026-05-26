@@ -24,6 +24,14 @@ class ChatTurnRequest(BaseModel):
     # evidence block as the highest-priority context. See
     # ``rag_app.services.doc_ingest``.
     session_id: Optional[str] = None
+    # Optional Agent Memory scope. These are no-ops until a memory provider is
+    # enabled, but they establish the API surface future ClaudeMemProvider
+    # adapters can use without changing the chat contract again.
+    user_id: Optional[str] = None
+    project_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    task_id: Optional[str] = None
+    memory_enabled: bool = True
 
 
 class ReferenceItem(BaseModel):
@@ -68,4 +76,4 @@ class ChatTurnResponse(BaseModel):
     # ({token: {id, description, source_file, section_title, full_text}}).
     # Frontend renders these as hover tooltips next to the rule ID.
     rule_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-
+    memory: Dict[str, Any] = Field(default_factory=dict)

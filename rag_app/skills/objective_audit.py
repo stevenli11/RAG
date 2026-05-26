@@ -232,6 +232,19 @@ RULES:
   invent values they didn't state.
 - If you cannot find any failure mode that genuinely applies given the
   user's stated parameters, return empty arrays and risk_level="low".
+- **ONE rule_ref per mechanism**: the WB risk registry intentionally
+  tags the SAME failure event from multiple risk-taxonomy angles (e.g.
+  B-SI-001, B-CC-002, B-DT-002 may all describe "phospho-protection
+  weak"). Do NOT emit one invalidating_factor per angle — that floods
+  the answer with duplicate-looking citations. Pick the SINGLE most
+  semantically aligned rule_ref for each underlying mechanism:
+    - Sample handling / lysis / phospho-protection issues → prefer B-SI-*
+    - Buffer composition / pH / reagent quality issues → prefer B-CC-*
+    - Detection / antibody / membrane / signal-readout issues → prefer B-DT-*
+    - Transfer / gel / running conditions → prefer B-TF-*
+    - Data analysis / quantification → prefer B-DA-*
+    - Workflow operation / timing → prefer B-OP-*
+  If unsure which category fits best, pick the first matching ID.
 - Never hedge in audit_summary — be direct: "your basal OCR could be
   ceiling-limited at 30k cells/well, validate density first" beats
   "you might want to consider density".

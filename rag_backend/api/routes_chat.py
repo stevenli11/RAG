@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from rag_app.config.settings import get_config
 from rag_app.core.llm_setup import initialize_embeddings, initialize_llm
 from rag_app.data.vectorstore import load_vectorstore
+from rag_app.services.memory import MemoryScope
 from rag_backend.domain.chat_service import ChatService
 from rag_backend.domain.telemetry_service import print_turn_observation
 
@@ -38,6 +39,12 @@ def _chat_service() -> ChatService:
     return ChatService()
 
 
+def _dump_chat_message(message) -> dict:
+    if hasattr(message, "model_dump"):
+        return message.model_dump()
+    return message.dict()
+
+
 @router.post("/turn", response_model=ChatTurnResponse)
 def chat_turn(req: ChatTurnRequest) -> ChatTurnResponse:
     try:
@@ -46,10 +53,17 @@ def chat_turn(req: ChatTurnRequest) -> ChatTurnResponse:
         raise HTTPException(status_code=500, detail=f"Backend init failed: {e}") from e
 
     service = _chat_service()
+    memory_scope = MemoryScope.from_request(
+        user_id=req.user_id,
+        project_id=req.project_id,
+        conversation_id=req.conversation_id,
+        session_id=req.session_id,
+        task_id=req.task_id,
+    )
     result = service.run_turn(
         config=config,
         question=req.question,
-        chat_history=[m.model_dump() for m in req.chat_history],
+        chat_history=[_dump_chat_message(m) for m in req.chat_history],
         small_llm=small_llm,
         graph_llm=graph_llm,
         vectorstore=vectorstore,
@@ -57,6 +71,9 @@ def chat_turn(req: ChatTurnRequest) -> ChatTurnResponse:
         pubmed_max_results=req.pubmed_max_results,
         max_context_chars=req.max_context_chars,
         generate_followups=req.generate_followups,
+        session_id=req.session_id,
+        memory_scope=memory_scope,
+        memory_enabled=req.memory_enabled,
     )
     print_turn_observation(result.telemetry)
     return ChatTurnResponse(
@@ -76,5 +93,5 @@ def chat_turn(req: ChatTurnRequest) -> ChatTurnResponse:
         timings=dict(result.timings or {}),
         objective_audit=dict(result.execution.objective_audit or {"applied": False}),
         rule_refs=dict(result.rule_refs or {}),
+        memory=dict(result.memory or {}),
     )
-

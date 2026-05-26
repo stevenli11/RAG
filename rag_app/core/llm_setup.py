@@ -1,28 +1,43 @@
 import dashscope
 from langchain_openai import ChatOpenAI
-from langchain_community.embeddings import DashScopeEmbeddings
+
+from rag_app.core.embeddings import get_embeddings
 
 def initialize_llm(config):
     """Initialize LLMs (cached)."""
     dashscope.api_key = config["dashscope_key"]
     
     # Large model for answer generation (with streaming enabled).
-    # Switched qwen-plus → qwen-max (qwen-plus quota exhausted; qwen3.6-plus
-    # was slower due to thinking-mode, so we prefer qwen-max for TTFT).
+    # qwen3.6-plus defaults to "thinking-mode" — it generates internal
+    # reasoning_content tokens BEFORE the first visible content chunk.
+    # We KEEP thinking on for higher answer quality, especially on the
+    # ObjectiveAudit "challenge user data" reasoning and on compound
+    # medical questions. The frontend SSE watchdog has been extended to
+    # accommodate the extra TTFT.
     graph_llm = ChatOpenAI(
         temperature=0,
-        model_name="qwen-max",
+        model_name="qwen3.6-plus",
         api_key=config["dashscope_key"],
         base_url=config["dashscope_base_url"],
-        streaming=True  # Enable streaming for better UX
+        streaming=True,
     )
-    
-    # Small model for query rewriting and classification (cost-effective)
+
+    # Small model for query rewriting, classification, audit, citation
+    # verification, follow-up generation, history compression.
+    # qwen3.5-flash expired in this account; qwen3.6-flash is the current
+    # low-latency Qwen route.
+    #
+    # Thinking-mode is DISABLED for small_llm: these tasks are
+    # constraint-following (emit valid JSON, classify into known buckets)
+    # rather than open-ended reasoning, so internal thinking adds 5-10s
+    # per call without measurable quality gain. We keep thinking ON only
+    # on graph_llm (answer generation) where the extra reasoning matters.
     small_llm = ChatOpenAI(
         temperature=0,
-        model_name="qwen-flash",
+        model_name="qwen3.6-flash",
         api_key=config["dashscope_key"],
-        base_url=config["dashscope_base_url"]
+        base_url=config["dashscope_base_url"],
+        extra_body={"enable_thinking": False},
     )
     
     return graph_llm, small_llm
@@ -30,10 +45,8 @@ def initialize_llm(config):
 def initialize_embeddings(config):
     """Initialize embeddings (cached)."""
     dashscope.api_key = config["dashscope_key"]
-    
-    base_embeddings = DashScopeEmbeddings(
-        model="text-embedding-v4",
-        dashscope_api_key=config["dashscope_key"]
+
+    return get_embeddings(
+        backend=config.get("embedding_backend") or "local",
+        model=config.get("embedding_model") or "BAAI/bge-small-en-v1.5",
     )
-    
-    return base_embeddings

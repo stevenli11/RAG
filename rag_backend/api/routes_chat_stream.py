@@ -23,6 +23,7 @@ site below.
                      answer_display, rule_refs}
 - ``citations``   — {verdicts}                                (emitted once,  after references; best-effort)
 - ``followups``   — {questions}                              (emitted once,  best-effort)
+- ``memory``      — {status}                                 (emitted once,  after best-effort write)
 - ``done``        — {}                                       (always last on success)
 - ``error``       — {message, stage}                         (terminal on failure)
 """
@@ -45,6 +46,7 @@ from rag_app.config.settings import get_config
 from rag_app.core.llm_setup import initialize_embeddings, initialize_llm
 from rag_app.data.vectorstore import load_vectorstore
 from rag_app.services import doc_ingest
+from rag_app.services.memory import MemoryScope, MemoryWrite, get_memory_provider
 from rag_backend.domain.chat_service import ChatService
 from rag_backend.domain.telemetry_service import build_turn_observation, print_turn_observation
 
@@ -99,6 +101,12 @@ def _reference_dict(article: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _dump_chat_message(message) -> Dict[str, Any]:
+    if hasattr(message, "model_dump"):
+        return message.model_dump()
+    return message.dict()
+
+
 async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], None]:
     """Drive one streaming turn through the pipeline stages."""
     try:
@@ -108,7 +116,15 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
         return
 
     service = _chat_service()
-    chat_history = [m.model_dump() for m in req.chat_history]
+    chat_history = [_dump_chat_message(m) for m in req.chat_history]
+    memory_scope = MemoryScope.from_request(
+        user_id=req.user_id,
+        project_id=req.project_id,
+        conversation_id=req.conversation_id,
+        session_id=req.session_id,
+        task_id=req.task_id,
+    )
+    memory_provider = get_memory_provider(config) if req.memory_enabled else None
     t_route_start = time.perf_counter()
 
     # ---- Stage 1a: route_question (rewrite + intent, ~2-3s) ------------
@@ -124,6 +140,8 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
             chat_history=chat_history,
             small_llm=small_llm,
             session_id=req.session_id,
+            memory_scope=memory_scope,
+            memory_provider=memory_provider,
         )
     except Exception as e:
         yield _sse("error", {"message": f"Router failed: {e}", "stage": "router"})
@@ -201,6 +219,7 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
             "rerank_status": dict(execution.rerank_status or {}),
             "sources_topk": sources_topk,
             "user_doc_attached": user_doc_attached,
+            "memory": dict(execution.memory or {}),
         },
     )
 
@@ -342,6 +361,29 @@ async def _run_stream(req: ChatTurnRequest) -> AsyncGenerator[Dict[str, str], No
         except Exception:
             follow_ups = []
         yield _sse("followups", {"questions": list(follow_ups or [])})
+
+    # ---- Stage 5: memory write (best-effort) --------------------------
+    memory_status = dict(execution.memory or {})
+    if memory_provider and req.memory_enabled:
+        try:
+            write_status = await asyncio.to_thread(
+                memory_provider.write,
+                scope=memory_scope,
+                turn=MemoryWrite(
+                    question=req.question,
+                    answer=finalized["answer_raw"],
+                    rewritten_question=execution.rewritten_question,
+                    intent=execution.intent,
+                    subquestions=list(execution.subquestions or []),
+                    references=list(finalized["references_used"] or []),
+                    metadata={"route": "chat_turn_stream"},
+                ),
+            )
+            memory_status["write"] = write_status
+        except Exception as exc:
+            provider_name = getattr(memory_provider, "name", "unknown")
+            memory_status["write"] = {"provider": provider_name, "stored": False, "error": str(exc)}
+    yield _sse("memory", {"status": memory_status})
 
     # ---- Telemetry (fire-and-forget, logged server-side only) ----------
     try:

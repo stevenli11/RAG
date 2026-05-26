@@ -45,6 +45,19 @@ class EvidenceFusionSkill:
         if summary:
             lines.append(f"Summary: {summary}")
 
+        rule_ids_to_cite: list[str] = []
+        # Defence-in-depth: the WB risk registry tags the same failure
+        # from multiple angles (B-SI-001 / B-CC-002 / B-DT-002 all share
+        # the exact same description). If the audit LLM ignores the
+        # "pick one rule_ref per mechanism" prompt rule and emits all
+        # three, dedupe HERE so the answer LLM doesn't see three rule
+        # IDs pointing at identical content.
+        try:
+            from rag_app.services.rule_extractor import lookup_rule
+        except Exception:
+            lookup_rule = None  # type: ignore[assignment]
+        seen_descriptions: set[str] = set()
+
         if invalidating:
             lines.append("\nInvalidating factors (the user's data may be wrong because):")
             for f in invalidating:
@@ -55,7 +68,15 @@ class EvidenceFusionSkill:
                 if evidence:
                     bullet += f" — evidence in user data: {evidence}"
                 if rule_ref:
-                    bullet += f" (cf. {rule_ref})"
+                    bracketed = f"[{rule_ref}]" if not rule_ref.startswith("[") else rule_ref
+                    # Dedupe by underlying rule description.
+                    entry = lookup_rule(rule_ref) if lookup_rule is not None else None
+                    desc_key = (entry or {}).get("description", "").strip().lower()
+                    if not desc_key or desc_key not in seen_descriptions:
+                        bullet += f" — rule reference: {bracketed}"
+                        rule_ids_to_cite.append(bracketed)
+                        if desc_key:
+                            seen_descriptions.add(desc_key)
                 lines.append(bullet)
 
         if assumptions:
@@ -70,6 +91,21 @@ class EvidenceFusionSkill:
 
         if weakest_link:
             lines.append(f"\nWeakest link in user's setup: {weakest_link}")
+
+        if rule_ids_to_cite:
+            # An explicit reminder block — when this is present the answer
+            # LLM has historically been more likely to inline the rule IDs
+            # verbatim. Without this nudge the IDs get used thematically
+            # but never appear as ``[B-CC-021]`` in the rendered output.
+            lines.append(
+                "\nINLINE THESE RULE IDs IN YOUR ANSWER (UI renders hover tooltips):"
+            )
+            lines.append("  " + " ".join(rule_ids_to_cite))
+            lines.append(
+                "Write them VERBATIM in square brackets right after the sentence "
+                "that discusses the corresponding failure mode. Example: "
+                "\"phospho-protection failed [B-SI-001], so the readout is unreliable.\""
+            )
 
         return "\n".join(lines)
 

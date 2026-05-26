@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from rag_app.services.local_rerank import (
+    disabled_rerank_value,
+    local_rerank_model,
+    local_rerank_texts,
+    rerank_backend,
+)
 
 from .base import SkillContext
 
@@ -12,15 +20,11 @@ from .base import SkillContext
 class ProtocolRetrievalSkill:
     name = "protocol_retrieval"
 
-    # Explicit allow-list of protocol files currently in use. Any file on
-    # disk not in this set is ignored by iteration, scoring, and the
-    # vector-store allow-list filter (so stale LanceDB chunks from
-    # previously-ingested files are suppressed too).
-    _ALLOWED_FILES: Tuple[str, ...] = (
-        "western_blot.risk_registry.md",
-        "Seahorse Real-Time Cell Metabolic Analysis.skill.md",
-        "CRISPR-Cas9.skill.md",
-    )
+    # By default, every protocol file on disk is eligible. Set
+    # PROTOCOL_ALLOWED_FILES to a comma-separated list only when you need to
+    # pin retrieval/ingestion to a curated subset.
+    _ALLOWED_FILES_ENV = "PROTOCOL_ALLOWED_FILES"
+    _PROTOCOL_FILE_PATTERNS: Tuple[str, ...] = ("*.skill.md", "*.risk_registry.md")
 
     _METHOD_HINTS: Dict[str, Tuple[str, ...]] = {
         "western_blot": ("western blot", "immunoblot", "sds-page", "pvdf", "membrane", "stripping"),
@@ -46,16 +50,36 @@ class ProtocolRetrievalSkill:
         self._file_tokens_by_name: Dict[str, set[str]] = {}
 
     def _iter_protocol_skill_files(self) -> List[Path]:
-        if not self.protocols_dir.exists():
+        return self.discover_protocol_files(self.protocols_dir)
+
+    @classmethod
+    def discover_protocol_files(cls, protocols_dir: Path) -> List[Path]:
+        if not protocols_dir.exists():
             return []
-        # Collect both *.skill.md and *.risk_registry.md, then keep only
-        # those on the allow-list. This guarantees a single source of truth
-        # even if new files are dropped into protocols/.
-        candidates = list(self.protocols_dir.glob("*.skill.md")) + list(
-            self.protocols_dir.glob("*.risk_registry.md")
+
+        candidates: List[Path] = []
+        for pattern in cls._PROTOCOL_FILE_PATTERNS:
+            candidates.extend(protocols_dir.rglob(pattern))
+
+        allowed = cls._configured_allowed_files()
+        if not allowed:
+            return sorted(candidates)
+
+        return sorted(
+            p for p in candidates
+            if p.name in allowed or str(p.relative_to(protocols_dir)) in allowed
         )
-        allowed = {name for name in self._ALLOWED_FILES}
-        return sorted(p for p in candidates if p.name in allowed)
+
+    @classmethod
+    def _configured_allowed_files(cls) -> set[str]:
+        raw = os.getenv(cls._ALLOWED_FILES_ENV, "")
+        if not raw.strip():
+            return set()
+        return {
+            item.strip()
+            for item in re.split(r"[,;\n]", raw)
+            if item.strip()
+        }
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -618,6 +642,35 @@ class ProtocolRetrievalSkill:
             return docs
         dashscope_key = str(ctx.config.get("dashscope_key") or "")
         rerank_model = str(ctx.config.get("rerank_model") or "qwen3-rerank")
+        backend = rerank_backend(ctx.config)
+        if backend == "local":
+            model_name = local_rerank_model(ctx.config)
+            try:
+                texts = [getattr(doc, "page_content", "") for doc in docs]
+                ranked = local_rerank_texts(query=query, texts=texts, top_n=top_n, model_name=model_name)
+                if ranked:
+                    ctx.state["protocol_rerank"] = {
+                        "enabled": True,
+                        "applied": True,
+                        "backend": "local",
+                        "model": model_name,
+                        "input_docs": len(docs),
+                        "output_docs": len(ranked),
+                    }
+                    return [docs[idx] for idx, _score in ranked]
+            except Exception as e:
+                ctx.state["protocol_rerank"] = {
+                    "enabled": True,
+                    "applied": False,
+                    "backend": "local",
+                    "model": model_name,
+                    "reason": f"error:{type(e).__name__}",
+                }
+                return docs[:top_n]
+
+        if disabled_rerank_value(rerank_model) or backend in {"none", "off", "disabled"}:
+            ctx.state["protocol_rerank"] = {"enabled": False, "applied": False, "reason": "disabled"}
+            return docs[:top_n]
         if not dashscope_key:
             ctx.state["protocol_rerank"] = {"enabled": False, "applied": False, "reason": "missing_dashscope_key"}
             return docs[:top_n]

@@ -101,7 +101,7 @@ kept under those names for backward compatibility) and the model name in
 | **OpenAI** | `gpt-5.5`, `gpt-5.5-pro` | `https://api.openai.com/v1` |
 | **Anthropic Claude** | `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5` | Native API, or via OpenRouter / proxy for OpenAI-compatible access |
 | **DeepSeek** | `deepseek-v4-pro`, `deepseek-v4-flash` (legacy `deepseek-chat` / `deepseek-reasoner` retiring 2026-07-24) | `https://api.deepseek.com/v1` |
-| **Alibaba Qwen / DashScope** | `qwen3.6-max-preview`, `qwen3.5-plus`, `qwen3.5-flash` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| **Alibaba Qwen / DashScope** | `qwen3.6-max-preview`, `qwen3.6-plus`, `qwen3.6-flash` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | **Moonshot (Kimi)** | `kimi-k2.6`, `kimi-k2.5` | `https://api.moonshot.cn/v1` |
 | **Google Gemini** | `gemini-3.1-pro`, `gemini-3-flash` | Via OpenAI-compatible gateway (e.g. OpenRouter) |
 | **Zhipu / GLM** | `glm-5.1`, `glm-5` | `https://open.bigmodel.cn/api/paas/v4` |
@@ -169,9 +169,13 @@ DASHSCOPE_API_BASE=https://your-provider.example.com/v1
 
 PUBMED_API_KEY=
 VECTOR_BACKEND=lancedb
-LANCEDB_PATH=./data/lancedb
+LANCEDB_PATH=./data/lancedb/bge-small-en-v1.5
 LANCEDB_TABLE=protocols
-RERANK_MODEL=your_rerank_model_name
+EMBEDDING_BACKEND=local
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+RERANK_BACKEND=local
+RERANK_MODEL=none
+LOCAL_RERANK_MODEL=BAAI/bge-reranker-base
 ```
 
 For the frontend, create `frontend_next/.env.local`:
@@ -186,9 +190,15 @@ BACKEND_API_URL=http://127.0.0.1:8001
 pip install -r requirements.txt
 python scripts/ingest_protocols_lancedb.py \
   --protocols-dir ./protocols \
-  --db-path ./data/lancedb \
-  --table protocols
+  --db-path ./data/lancedb/bge-small-en-v1.5 \
+  --table protocols \
+  --embedder local \
+  --model BAAI/bge-small-en-v1.5
 ```
+
+The first local run downloads the BGE embedding model from Hugging Face; later
+runs use the local cache. If the model is already cached and you are offline,
+set `EMBEDDING_LOCAL_FILES_ONLY=1`.
 
 ### 3. Start the backend (terminal A)
 

@@ -7,14 +7,16 @@ Operational + evaluation scripts.
 ```bash
 python scripts/ingest_protocols_lancedb.py \
     --protocols-dir ./protocols \
-    --db-path ./data/lancedb \
-    --table protocols
+    --db-path ./data/lancedb/bge-small-en-v1.5 \
+    --table protocols \
+    --embedder local \
+    --model BAAI/bge-small-en-v1.5
 ```
 
 What it does:
 1. Walks every `*.skill.md` / `*.risk_registry.md` under `protocols/`.
 2. Chunks each file (size=250, overlap=30).
-3. Embeds chunks with DashScope `text-embedding-v4`.
+3. Embeds chunks with the configured embedding backend/model.
 4. Writes a LanceDB table + a Tantivy FTS (BM25) index on the chunk text.
 
 Dry-run (chunk only, no embedding API calls):

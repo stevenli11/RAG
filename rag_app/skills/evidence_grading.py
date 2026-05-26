@@ -6,6 +6,13 @@ import logging
 import re
 from typing import Any, Dict, List, Tuple
 
+from rag_app.services.local_rerank import (
+    disabled_rerank_value,
+    local_rerank_model,
+    local_rerank_texts,
+    rerank_backend,
+)
+
 from .base import SkillContext
 
 logger = logging.getLogger(__name__)
@@ -130,6 +137,48 @@ class EvidenceGradingSkill:
             return None
 
         rerank_model = str(ctx.config.get("rerank_model") or "qwen3-rerank")
+        backend = rerank_backend(ctx.config)
+        if backend == "local":
+            model_name = local_rerank_model(ctx.config)
+            try:
+                texts = [
+                    f"{art.get('title', '')}\n{art.get('abstract', '')}".strip() or "(no content)"
+                    for art in articles
+                ]
+                ranked = local_rerank_texts(
+                    query=question,
+                    texts=texts,
+                    top_n=min(top_n, len(texts)),
+                    model_name=model_name,
+                )
+                results: List[Tuple[float, str, Dict[str, Any]]] = []
+                for idx, relevance_score in ranked:
+                    art = articles[idx]
+                    quality = self._quality_label(art.get("title", ""), art.get("abstract", ""))
+                    results.append((float(relevance_score), quality, art))
+                ctx.state["pubmed_rerank"] = {
+                    "enabled": True,
+                    "applied": bool(results),
+                    "backend": "local",
+                    "model": model_name,
+                    "input_docs": len(articles),
+                    "output_docs": len(results),
+                }
+                return results or None
+            except Exception:
+                logger.warning("Local rerank call failed; falling back to keyword scoring.", exc_info=True)
+                ctx.state["pubmed_rerank"] = {
+                    "enabled": True,
+                    "applied": False,
+                    "backend": "local",
+                    "model": model_name,
+                    "reason": "local_error",
+                }
+                return None
+
+        if disabled_rerank_value(rerank_model) or backend in {"none", "off", "disabled"}:
+            ctx.state["pubmed_rerank"] = {"enabled": False, "applied": False, "reason": "disabled"}
+            return None
 
         try:
             from langchain_community.document_compressors import DashScopeRerank

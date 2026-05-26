@@ -28,11 +28,20 @@ PUBMED_API_KEY=
 
 # Vector store (local-first by default)
 VECTOR_BACKEND=lancedb
-LANCEDB_PATH=./data/lancedb
+LANCEDB_PATH=./data/lancedb/bge-small-en-v1.5
 LANCEDB_TABLE=protocols
 
-# Cross-encoder rerank model name (provider-specific)
-RERANK_MODEL=your_rerank_model_name
+# Embedding backend/model used for both ingestion and query-time retrieval.
+EMBEDDING_BACKEND=local
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+
+# Rerank backend:
+# - none: skip rerank; fall back to LanceDB hybrid + keyword scoring
+# - dashscope: use DashScopeRerank with RERANK_MODEL
+# - local: use sentence-transformers CrossEncoder with LOCAL_RERANK_MODEL
+RERANK_BACKEND=local
+RERANK_MODEL=none
+LOCAL_RERANK_MODEL=BAAI/bge-reranker-base
 
 # Optional Milvus/Zilliz (if VECTOR_BACKEND=milvus)
 MILVUS_URI=
@@ -67,12 +76,13 @@ cd frontend_next && npm install && npm run dev
 | `APP_DEBUG_QUERY=1` | Print the small_llm raw response from `rewrite_query_with_pubmed` |
 | `RAG_DEBUG_CONTEXT=1` | Dump the full evidence + instructions payload sent to the answer LLM into `debug/last_turn.md` |
 | `RAG_STREAM_TIMING=1` | Print per-stage latency (route / retrieve / first-token / total) to stderr |
+| `EMBEDDING_LOCAL_FILES_ONLY=1` | Force Hugging Face local embedding models to load from cache only |
 
 ## Notes
 
 - `.env` is gitignored.
 - For production, prefer deployment-time secret management (e.g. a vault or a
   cloud secret manager) over committing keys anywhere on disk.
-- The LanceDB index lives under `data/lancedb/` and is gitignored — rebuild it
-  with `python scripts/ingest_protocols_lancedb.py` after pulling new
-  protocol files.
+- The LanceDB index lives under `data/lancedb/bge-small-en-v1.5/` and is
+  gitignored — rebuild it with `python scripts/ingest_protocols_lancedb.py`
+  after pulling new protocol files.

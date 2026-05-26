@@ -748,8 +748,14 @@ export default function Page() {
           match = frameSep.exec(buffer);
         }
 
-        if (!seenAnyEvent && Date.now() - startedAt > 15000) {
-          throw new Error("No SSE events within 15s — check backend URL.");
+        // Bumped from 15s → 120s because qwen3.6-plus runs with
+        // thinking-mode ON for both LLMs in this build. The model emits
+        // internal `reasoning_content` for 5-60s before the first visible
+        // `content` chunk; LangChain's `.stream()` doesn't surface that
+        // reasoning, so the SSE stream legitimately stays quiet during
+        // thinking. 120s gives plenty of headroom on compound questions.
+        if (!seenAnyEvent && Date.now() - startedAt > 120000) {
+          throw new Error("No SSE events within 120s — check backend URL.");
         }
       }
     } catch (err) {

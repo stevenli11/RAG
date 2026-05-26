@@ -27,6 +27,10 @@ def get_config(
     vector_backend = ""
     lancedb_path = ""
     lancedb_table = ""
+    embedding_backend = ""
+    embedding_model = ""
+    rerank_backend = ""
+    local_rerank_model = ""
     
     # Read configuration from environment variables.
     if not dashscope_key:
@@ -62,6 +66,18 @@ def get_config(
     if not lancedb_table:
         load_dotenv()
         lancedb_table = os.getenv("LANCEDB_TABLE", "")
+    if not embedding_backend:
+        load_dotenv()
+        embedding_backend = os.getenv("EMBEDDING_BACKEND", "")
+    if not embedding_model:
+        load_dotenv()
+        embedding_model = os.getenv("EMBEDDING_MODEL", "")
+    if not rerank_backend:
+        load_dotenv()
+        rerank_backend = os.getenv("RERANK_BACKEND", "")
+    if not local_rerank_model:
+        load_dotenv()
+        local_rerank_model = os.getenv("LOCAL_RERANK_MODEL", "")
 
     return {
         "dashscope_key": dashscope_key.strip().strip('"').strip("'") if dashscope_key else "",
@@ -71,7 +87,14 @@ def get_config(
         "milvus_password": milvus_password,
         "milvus_token": (milvus_token or "").strip(),
         "milvus_collection": (milvus_collection or "company_milvus"),
-        "rerank_model": (rerank_model or "qwen3-rerank"),
+        # Set RERANK_MODEL=none/off/disabled to skip DashScope rerank entirely.
+        # Useful when the provider retires or quota-blocks rerank models; the
+        # pipeline falls back to LanceDB hybrid retrieval + keyword scoring.
+        "rerank_model": (rerank_model or "none"),
+        "rerank_backend": (rerank_backend or "none").strip().lower(),
+        "local_rerank_model": (local_rerank_model or "BAAI/bge-reranker-base").strip(),
+        "embedding_backend": (embedding_backend or "local").strip().lower(),
+        "embedding_model": (embedding_model or "BAAI/bge-small-en-v1.5").strip(),
         "pubmed_api_key": pubmed_api_key if pubmed_api_key else "",
         # "lancedb" (default here in RAG_local, hybrid BM25+vec) | "milvus" (legacy cloud)
         "vector_backend": (vector_backend or "lancedb").strip().lower(),

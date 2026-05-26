@@ -6,9 +6,9 @@ Usage:
         --db-path ./data/lancedb \
         --table protocols
 
-Reads every ``*.skill.md`` under ``--protocols-dir``, chunks it with the same
-settings used for Milvus ingestion (size=250, overlap=30), embeds each chunk
-with DashScope ``text-embedding-v4`` (matching the current stack), writes a
+Reads every ``*.skill.md`` / ``*.risk_registry.md`` under ``--protocols-dir``,
+chunks it with the same settings used for Milvus ingestion (size=250,
+overlap=30), embeds each chunk with the configured embedding backend/model, writes a
 LanceDB table, and builds a BM25/FTS index on the ``text`` column.
 
 The chunks are schema-compatible with the existing Milvus collection so the
@@ -34,7 +34,7 @@ def _load_embeddings(backend: str = None, model: str = None) -> Any:
     """Return an embedder via the shared factory.
 
     Respects ``--embedder`` / ``--model`` CLI args, then ``EMBEDDING_BACKEND``
-    / ``EMBEDDING_MODEL`` env, then defaults (dashscope + text-embedding-v4).
+    / ``EMBEDDING_MODEL`` env, then the shared embedding defaults.
     """
     from rag_app.core.embeddings import get_embeddings
     return get_embeddings(backend=backend, model=model)
@@ -43,15 +43,11 @@ def _load_embeddings(backend: str = None, model: str = None) -> Any:
 def _load_protocol_files(protocols_dir: Path) -> List[Path]:
     if not protocols_dir.exists():
         raise SystemExit(f"Protocols directory not found: {protocols_dir}")
-    # Single source of truth: reuse the runtime allow-list so ingest and
-    # retrieval can never drift. Picks up both *.skill.md and
-    # *.risk_registry.md per ProtocolRetrievalSkill._ALLOWED_FILES.
+    # Single source of truth: reuse runtime discovery so ingest and retrieval
+    # can never drift. Defaults to every *.skill.md / *.risk_registry.md file;
+    # PROTOCOL_ALLOWED_FILES can narrow this when needed.
     from rag_app.skills.protocol_retrieval import ProtocolRetrievalSkill
-    allowed = set(ProtocolRetrievalSkill._ALLOWED_FILES)
-    candidates = list(protocols_dir.rglob("*.skill.md")) + list(
-        protocols_dir.rglob("*.risk_registry.md")
-    )
-    return sorted(p for p in candidates if p.name in allowed)
+    return ProtocolRetrievalSkill.discover_protocol_files(protocols_dir)
 
 
 def _chunk_documents(files: List[Path], protocols_dir: Path) -> List[Dict[str, Any]]:
@@ -151,7 +147,7 @@ def main() -> int:
 
     if args.dry_run:
         # Estimate embedding-token cost before you spend real quota.
-        # DashScope text-embedding-v4 uses a BPE-ish tokenizer; 1 token ≈ 4 chars
+        # DashScope embedding models use BPE-ish tokenizers; 1 token ≈ 4 chars
         # for English prose, ≈ 1.5 chars for Chinese. We report both bounds.
         total_chars = sum(len(r["text"]) for r in rows)
         est_en = total_chars // 4

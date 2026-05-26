@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from rag_app.agent.query import _detect_active_method_context, rewrite_query_with_pubmed
 from rag_app.services import doc_ingest
+from rag_app.services.memory import MemoryProvider, MemoryScope
 from rag_app.skills import (
     AnswerDirectiveSkill,
     EvidenceGradingSkill,
@@ -98,6 +99,7 @@ class TurnExecutionResult:
     rerank_status: Dict[str, Any]
     subquestions: List[str]
     objective_audit: Dict[str, Any]
+    memory: Dict[str, Any]
 
 
 @dataclass
@@ -140,6 +142,8 @@ class ChatOrchestrator:
         chat_history: List[Dict[str, Any]],
         small_llm: Any,
         session_id: str | None = None,
+        memory_scope: MemoryScope | None = None,
+        memory_provider: MemoryProvider | None = None,
     ) -> RouteResult:
         """Phase 1: rewrite + classify intent. Typically 2–3s end-to-end.
 
@@ -183,6 +187,33 @@ class ChatOrchestrator:
             ctx.state["_pubmed_query_hints"] = pubmed_query_hints
         if subquestions:
             ctx.state["_subquestions"] = subquestions
+
+        memory_items = []
+        memory_block = ""
+        memory_status: Dict[str, Any] = {"provider": "none", "retrieved": 0, "enabled": False}
+        if memory_provider and memory_scope and memory_scope.enabled():
+            memory_status = {"provider": memory_provider.name, "retrieved": 0, "enabled": True}
+            try:
+                memory_items = memory_provider.retrieve(
+                    scope=memory_scope,
+                    query=question,
+                    rewritten_query=rewritten,
+                    memory_types=["user", "project", "task", "evidence"],
+                    limit=6,
+                )
+                memory_block = memory_provider.render(memory_items)
+                memory_status["retrieved"] = len(memory_items)
+            except Exception as exc:
+                memory_items = []
+                memory_block = ""
+                memory_status.update({"error": str(exc), "retrieved": 0})
+        if memory_scope:
+            ctx.state["_memory_scope"] = memory_scope.as_dict()
+        if memory_items:
+            ctx.state["_memory_items"] = [item.as_dict() for item in memory_items]
+        if memory_block:
+            ctx.state["_memory_block"] = memory_block
+        ctx.state["_memory_status"] = memory_status
 
         # Carry-forward method context as a sticky-skill fallback for
         # ProtocolRetrievalSkill. Even when rewrite_query preserves the
@@ -317,6 +348,11 @@ class ChatOrchestrator:
             audit=audit if audit.get("applied") else None,
         )
 
+        memory_block = str(ctx.state.get("_memory_block") or "").strip()
+        if memory_block:
+            fused["evidence"] = memory_block + "\n\n" + str(fused.get("evidence", "") or "")
+            fused["context"] = memory_block + "\n\n" + str(fused.get("context", "") or "")
+
         _maybe_dump_context(
             question=question,
             rewritten=rewritten,
@@ -352,6 +388,7 @@ class ChatOrchestrator:
             },
             subquestions=subquestions,
             objective_audit=audit if isinstance(audit, dict) else {"applied": False},
+            memory=dict(ctx.state.get("_memory_status") or {}),
         )
 
     # ------------------------------------------------------------------
@@ -370,6 +407,8 @@ class ChatOrchestrator:
         pubmed_max_results: int,
         max_context_chars: int,
         session_id: str | None = None,
+        memory_scope: MemoryScope | None = None,
+        memory_provider: MemoryProvider | None = None,
     ) -> TurnExecutionResult:
         route = self.route_question(
             config=config,
@@ -377,6 +416,8 @@ class ChatOrchestrator:
             chat_history=chat_history,
             small_llm=small_llm,
             session_id=session_id,
+            memory_scope=memory_scope,
+            memory_provider=memory_provider,
         )
         return self.retrieve_and_fuse(
             route=route,
